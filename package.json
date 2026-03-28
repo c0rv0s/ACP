@@ -1,0 +1,34 @@
+{
+	"name": "agent-credit-protocol",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:contracts": "forge build src/AGCToken.sol src/StabilityVault.sol src/RewardDistributor.sol src/SettlementRouter.sol src/PolicyEngine.sol src/AGCHook.sol && forge build src/PolicyController.sol --via-ir",
+		"test": "pnpm test:agchook && pnpm test:reward && pnpm test:router && pnpm test:policy",
+		"test:agchook": "forge test --match-path test/agchook/AGCHook.t.sol --skip PolicyController.sol --offline",
+		"test:reward": "forge test --match-path test/reward/RewardDistributor.t.sol --skip AGCHook.sol --skip PolicyController.sol --offline --via-ir",
+		"test:router": "forge test --match-path test/router/SettlementRouter.t.sol --skip AGCHook.sol --skip PolicyController.sol --offline --via-ir",
+		"test:policy": "forge test --match-path test/policy/PolicyController.t.sol --skip AGCHook.sol --offline --via-ir",
+		"test:gas": "forge test --match-path test/agchook/AGCHook.t.sol --skip PolicyController.sol --gas-report --offline && forge test --match-path test/reward/RewardDistributor.t.sol --skip AGCHook.sol --skip PolicyController.sol --gas-report --offline --via-ir && forge test --match-path test/router/SettlementRouter.t.sol --skip AGCHook.sol --skip PolicyController.sol --gas-report --offline --via-ir && forge test --match-path test/policy/PolicyController.t.sol --skip AGCHook.sol --gas-report --offline --via-ir",
+		"format:contracts": "forge fmt",
+		"build:web": "vite build --config web/vite.config.ts",
+		"dev:web": "vite --config web/vite.config.ts",
+		"generate:abis": "node script/exportAbis.mjs",
+		"deploy:local": "node script/deployLocal.mjs"
+	},
+	"dependencies": {
+		"@tanstack/react-query": "^5.95.2",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
+		"viem": "^2.47.6",
+		"wagmi": "^3.6.0"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"tsx": "^4.21.0",
+		"typescript": "^6.0.2",
+		"vite": "^8.0.3"
+	}
+}

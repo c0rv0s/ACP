@@ -1,0 +1,13 @@
+cache/
+out/
+broadcast/
+node_modules/
+dist/
+.DS_Store
+web/dist/
+web/.vite/
+coverage/
+coverage-report/
+.env
+web/.env.local
+deployments/*.json
