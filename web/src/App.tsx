@@ -818,7 +818,9 @@ export default function App() {
 
       <header className="topbar">
         <div className="topbar-brand">
-          <div className="topbar-mark">AGC</div>
+          <div className="topbar-mark" aria-hidden="true">
+            <img className="topbar-mark-image" src="/agc-mark.svg" alt="" />
+          </div>
           <div>
             <p className="topbar-name">Agent Credit Protocol</p>
             <p className="topbar-caption">

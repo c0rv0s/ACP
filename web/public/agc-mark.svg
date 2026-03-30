@@ -1,0 +1,49 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="128" fill="#07090D"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" stroke="#FFF8E72E" stroke-width="8"/>
+  <circle cx="256" cy="256" r="178" fill="url(#coinGlow)"/>
+  <circle cx="256" cy="256" r="150" fill="#091017" stroke="url(#coinRing)" stroke-width="18"/>
+  <path d="M256 126C214.578 126 181 159.578 181 201V311C181 352.422 214.578 386 256 386C291.203 386 320.74 361.721 329.577 329H286.576C280.002 339.663 268.229 346.779 255 346.779C234.683 346.779 218.221 330.317 218.221 310V202C218.221 181.683 234.683 165.221 255 165.221C268.229 165.221 280.002 172.337 286.576 183H329.577C320.74 150.279 291.203 126 256 126Z" fill="url(#cStroke)"/>
+  <path d="M258.555 164C217.556 164 184.32 197.235 184.32 238.235V273.765C184.32 314.765 217.556 348 258.555 348C295.359 348 326.265 321.218 332.688 286.235H256.133V247.679H377V266.901C377 327.713 327.712 377 266.901 377H250.21C189.398 377 140.11 327.713 140.11 266.901V245.099C140.11 184.287 189.398 135 250.21 135H266.901C318.945 135 362.548 171.086 373.996 219.679H332.265C322.793 186.84 293.016 164 258.555 164Z" fill="url(#gStroke)"/>
+  <path d="M257.226 155L336 352H293.454L279.029 315.431H233.627L219.431 352H176L254.774 155H257.226ZM255.95 220.886L246.637 245.622L231.751 284.621H280.905L266.248 245.622L257.226 220.886H255.95Z" fill="#FFF8E7"/>
+  <circle cx="376" cy="138" r="19" fill="url(#dotA)"/>
+  <circle cx="137" cy="376" r="15" fill="url(#dotB)"/>
+  <defs>
+    <linearGradient id="bg" x1="62" y1="36" x2="440" y2="466" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="0.42" stop-color="#0B0F17"/>
+      <stop offset="0.72" stop-color="#1A1015"/>
+      <stop offset="1" stop-color="#0A0F16"/>
+    </linearGradient>
+    <radialGradient id="coinGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(208 190) rotate(42.801) scale(263.836)">
+      <stop stop-color="#2CF6FF" stop-opacity="0.34"/>
+      <stop offset="0.36" stop-color="#D9FF39" stop-opacity="0.22"/>
+      <stop offset="0.7" stop-color="#FF7112" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#FF4A8A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="coinRing" x1="138" y1="123" x2="371" y2="382" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2CF6FF"/>
+      <stop offset="0.34" stop-color="#D9FF39"/>
+      <stop offset="0.7" stop-color="#FFB23E"/>
+      <stop offset="1" stop-color="#FF4A8A"/>
+    </linearGradient>
+    <linearGradient id="cStroke" x1="181" y1="152" x2="329" y2="373" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2CF6FF"/>
+      <stop offset="1" stop-color="#D9FF39"/>
+    </linearGradient>
+    <linearGradient id="gStroke" x1="160" y1="144" x2="377" y2="366" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8DB1"/>
+      <stop offset="0.46" stop-color="#FF7112"/>
+      <stop offset="1" stop-color="#FFE800"/>
+    </linearGradient>
+    <linearGradient id="dotA" x1="363" y1="121" x2="390" y2="153" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2CF6FF"/>
+      <stop offset="1" stop-color="#FF7112"/>
+    </linearGradient>
+    <linearGradient id="dotB" x1="126" y1="362" x2="147" y2="389" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8DB1"/>
+      <stop offset="1" stop-color="#D9FF39"/>
+    </linearGradient>
+  </defs>
+</svg>
