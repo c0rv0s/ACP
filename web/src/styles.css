@@ -1557,6 +1557,27 @@ code {
     font-size: 13px;
   }
 
+  .hero-ascii,
+  .mini-ascii,
+  .closing-ascii,
+  .ascii-interlude-frame {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hero-ascii,
+  .ascii-interlude-frame {
+    white-space: pre;
+  }
+
+  .mini-ascii,
+  .closing-ascii {
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
   .metrics,
   .panels,
   .manifesto-grid,
