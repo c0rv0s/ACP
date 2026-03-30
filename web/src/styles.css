@@ -245,17 +245,14 @@ code {
 .topbar-mark {
   display: grid;
   place-items: center;
-  width: 82px;
-  height: 58px;
-  min-width: 82px;
-  padding: 8px;
-  border: 2px solid rgba(0, 0, 0, 0.4);
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, var(--acid), var(--cyan));
-  box-shadow:
-    0 0 24px rgba(44, 246, 255, 0.35),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.3);
+  width: 88px;
+  height: 88px;
+  min-width: 88px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   transform: rotate(-2deg);
 }
 
@@ -265,8 +262,8 @@ code {
   height: 100%;
   object-fit: contain;
   filter:
-    drop-shadow(0 0 10px rgba(44, 246, 255, 0.18))
-    drop-shadow(0 0 16px rgba(255, 113, 18, 0.12));
+    drop-shadow(0 0 14px rgba(44, 246, 255, 0.22))
+    drop-shadow(0 0 22px rgba(255, 113, 18, 0.16));
 }
 
 .topbar-name {
