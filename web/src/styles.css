@@ -192,6 +192,7 @@ code {
 .dashboard-zone,
 .manifesto-grid,
 .explainer-zone,
+.vending-machine-section,
 .regime-theater,
 .flow-section,
 .closing-panel,
@@ -392,6 +393,7 @@ code {
 .manifesto-card,
 .ascii-interlude,
 .explainer-panel,
+.vending-machine-section,
 .regime-card,
 .flow-card,
 .closing-panel {
@@ -754,6 +756,7 @@ code {
 
 .dashboard-zone,
 .explainer-zone,
+.vending-machine-section,
 .regime-theater,
 .flow-section {
   padding: 28px;
@@ -1353,6 +1356,87 @@ code {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.vending-machine-layout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.vending-machine-art {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 20px 22px;
+  border: 2px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(255, 232, 0, 0.1), transparent 24%),
+    radial-gradient(circle at 84% 76%, rgba(44, 246, 255, 0.12), transparent 26%),
+    rgba(0, 0, 0, 0.22);
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.02vw, 13px);
+  line-height: 1.48;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  white-space: pre;
+  overflow-x: auto;
+  color: rgba(255, 248, 231, 0.92);
+  text-shadow:
+    0 0 12px rgba(255, 232, 0, 0.12),
+    0 0 18px rgba(44, 246, 255, 0.12);
+}
+
+.vending-machine-console {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 28px;
+  border: 2px solid rgba(255, 255, 255, 0.10);
+  border-radius: 26px;
+  background:
+    linear-gradient(
+      160deg,
+      rgba(44, 246, 255, 0.06),
+      rgba(255, 113, 18, 0.06)
+    ),
+    rgba(0, 0, 0, 0.18);
+}
+
+.vending-machine-status {
+  color: var(--ink-dim);
+}
+
+.vending-machine-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.vending-machine-arrow,
+.vending-machine-status {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.vending-machine-arrow {
+  color: var(--acid);
+  animation: pulse-arrow 1.4s ease-in-out infinite;
+}
+
+.vending-machine-button {
+  min-width: 164px;
+}
+
+.vending-machine-status {
+  max-width: 24ch;
+  text-align: center;
+}
+
 .regime-card {
   padding: 22px;
   min-height: 240px;
@@ -1565,6 +1649,18 @@ code {
   }
 }
 
+@keyframes pulse-arrow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(3px);
+  }
+}
+
 @keyframes cursor-stamp-fade {
   0% {
     opacity: 0.92;
@@ -1655,6 +1751,7 @@ code {
   .topbar,
   .dashboard-zone,
   .explainer-zone,
+  .vending-machine-section,
   .regime-theater,
   .flow-section,
   .closing-panel,
@@ -1695,10 +1792,30 @@ code {
     font-size: 13px;
   }
 
+  .vending-machine-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .vending-machine-console {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .vending-machine-controls {
+    flex-direction: row;
+  }
+
+  .vending-machine-status {
+    max-width: none;
+    text-align: center;
+  }
+
   .hero-ascii,
   .mini-ascii,
   .closing-ascii,
-  .ascii-interlude-frame {
+  .ascii-interlude-frame,
+  .vending-machine-art {
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
@@ -1757,5 +1874,9 @@ code {
   .mini-ascii,
   .closing-ascii {
     font-size: 11px;
+  }
+
+  .vending-machine-button {
+    width: 100%;
   }
 }

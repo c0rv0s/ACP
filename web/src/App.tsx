@@ -542,6 +542,10 @@ const flowSteps = [
   },
 ] as const;
 
+const vendingCoinCount = 6;
+const vendingLaneWidth = 31;
+const vendingPanelWidth = 28;
+
 type CursorStamp = {
   id: number;
   x: number;
@@ -559,6 +563,188 @@ function fmt18(v: bigint | undefined, decimals = 4): string {
 function fmtBps(v: bigint | undefined): string {
   if (v === undefined) return " - ";
   return `${(Number(v) / 100).toFixed(2)}%`;
+}
+
+type VendingMachineStage = {
+  key: string;
+  statusCopy: string;
+  durationMs?: number;
+  trailTop: string;
+  trailBottom: string;
+  display: string;
+  slot: string;
+  gears: string;
+  clacker: string;
+  chute: string;
+  candyOut: string;
+};
+
+const idleVendingStage: VendingMachineStage = {
+  key: "idle",
+  statusCopy: "ʘ‿ʘ",
+  trailTop: "",
+  trailBottom: "",
+  display: "CANDY BANK",
+  slot: "COIN SLOT [ ]",
+  gears: "GEARS   o-.-o   o-.-o",
+  clacker: "RATCHET   _/   \\_",
+  chute: "CHUTE    [      ]",
+  candyOut: "",
+};
+
+const vendingMachineSequence: readonly VendingMachineStage[] = [
+  {
+    key: "roll-1",
+    statusCopy: "ヾ(⌐■_■)ノ♪",
+    durationMs: 240,
+    trailTop: "    ($) -------->",
+    trailBottom: "",
+    display: "CANDY BANK",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "RATCHET   _/   \\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "roll-2",
+    statusCopy: "( ͡ᵔ ͜ʖ ͡ᵔ )",
+    durationMs: 240,
+    trailTop: "                ($) --->",
+    trailBottom: "",
+    display: "CANDY BANK",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "RATCHET   _/   \\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "insert",
+    statusCopy: "\ (•◡•) /",
+    durationMs: 250,
+    trailTop: "",
+    trailBottom: "                         v",
+    display: "TINNNNG",
+    slot: "COIN SLOT ($)",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "RATCHET   _/ ! \\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "clack-1",
+    statusCopy: "༼ つ ಥ_ಥ ༽つ",
+    durationMs: 240,
+    trailTop: "",
+    trailBottom: "",
+    display: "CLACK",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o<+>o   o<+>o",
+    clacker: "HAMMER    _\\|!|/_",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "clack-2",
+    statusCopy: "ᕦ(ò_óˇ)ᕤ",
+    durationMs: 240,
+    trailTop: "",
+    trailBottom: "",
+    display: "CLACK-CLACK",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o>x<o   o>x<o",
+    clacker: "HAMMER    _/|!|\\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "mix",
+    statusCopy: "(ง°ل͜°)ง",
+    durationMs: 250,
+    trailTop: "",
+    trailBottom: "",
+    display: "WHIRRRR",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o<*>o   o<*>o",
+    clacker: "MIXER    [==#==]",
+    chute: "CHUTE    [      ]",
+    candyOut: "",
+  },
+  {
+    key: "drop",
+    statusCopy: "(っ˘ڡ˘ς)",
+    durationMs: 250,
+    trailTop: "",
+    trailBottom: "",
+    display: "THUNK",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "MIXER    [__#__]",
+    chute: "CHUTE    [o={#@#}=o]",
+    candyOut: "",
+  },
+  {
+    key: "pop-1",
+    statusCopy: "(─‿‿─)",
+    durationMs: 300,
+    trailTop: "",
+    trailBottom: "",
+    display: "DELIVER",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "RATCHET   _/   \\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "--> o={#@#}=o",
+  },
+  {
+    key: "pop-2",
+    statusCopy: "(ʘᗩʘ')",
+    durationMs: 1100,
+    trailTop: "",
+    trailBottom: "",
+    display: "ENJOY",
+    slot: "COIN SLOT [ ]",
+    gears: "GEARS   o-.-o   o-.-o",
+    clacker: "RATCHET   _/   \\_",
+    chute: "CHUTE    [      ]",
+    candyOut: "====> (;´༎ຶД༎ຶ`)",
+  },
+] as const;
+
+function padVendingLane(value: string) {
+  return value.padEnd(vendingLaneWidth, " ");
+}
+
+function padVendingPanel(value: string) {
+  return value.padEnd(vendingPanelWidth, " ");
+}
+
+function buildVendingMachineFrame({
+  activeCoinIndex,
+  stage,
+}: {
+  activeCoinIndex: number | null;
+  stage: VendingMachineStage;
+}) {
+  const queue = Array.from({ length: vendingCoinCount }, (_, index) =>
+    activeCoinIndex !== null && activeCoinIndex === index ? "   " : "($)",
+  ).join("  ");
+
+  return [
+    `${padVendingLane(queue)}     ______________________________________________`,
+    `${padVendingLane(stage.trailTop)}    / .------------------------------------------. \\`,
+    `${padVendingLane(stage.trailBottom)}   / /      VEND-O-MATIC 9000                     \\ \\`,
+    `${padVendingLane("")}  | |      .-------------------------------.      | |`,
+    `${padVendingLane("")}  | |      | ${padVendingPanel(stage.display)} |       | |`,
+    `${padVendingLane("")}  | |      | ${padVendingPanel(stage.slot)} |       | |`,
+    `${padVendingLane("")}  | |      | ${padVendingPanel(stage.gears)} |       | |`,
+    `${padVendingLane("")}  | |      | ${padVendingPanel(stage.clacker)} |       | |`,
+    `${padVendingLane("")}  | |      | ${padVendingPanel(stage.chute)} |       | |   ${stage.candyOut}`,
+    `${padVendingLane("")}  | |      |__________.--.__.--.__________|       | |`,
+    `${padVendingLane("")}  | |______|____________|__||__|___________|______| |`,
+    `${padVendingLane("")}   \\_______________________________________________/`,
+  ].join("\n");
 }
 
 function CursorTrail() {
@@ -666,6 +852,76 @@ function AsciiInterlude({
         {frames[frameIndex]}
       </pre>
       <p className="ascii-interlude-caption">{caption}</p>
+    </section>
+  );
+}
+
+function AsciiVendingMachine() {
+  const [activeCoinIndex, setActiveCoinIndex] = useState<number | null>(null);
+  const [nextCoinIndex, setNextCoinIndex] = useState(0);
+  const [stageIndex, setStageIndex] = useState<number | null>(null);
+  const activeStage =
+    stageIndex === null
+      ? idleVendingStage
+      : vendingMachineSequence[stageIndex] ?? idleVendingStage;
+
+  useEffect(() => {
+    if (stageIndex === null) return;
+
+    const timeout = window.setTimeout(() => {
+      if (stageIndex >= vendingMachineSequence.length - 1) {
+        setStageIndex(null);
+        setActiveCoinIndex(null);
+        return;
+      }
+
+      setStageIndex(stageIndex + 1);
+    }, activeStage.durationMs ?? 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeStage.durationMs, stageIndex]);
+
+  function handleVend() {
+    if (stageIndex !== null) return;
+
+    setActiveCoinIndex(nextCoinIndex);
+    setNextCoinIndex((current) => (current + 1) % vendingCoinCount);
+    setStageIndex(0);
+  }
+
+  const frame = buildVendingMachineFrame({ activeCoinIndex, stage: activeStage });
+
+  return (
+    <section className="vending-machine-section">
+      <div className="dash-heading">
+        <p className="section-kicker">sugar break</p>
+      </div>
+
+      <div className="vending-machine-layout">
+        <pre className="vending-machine-art" aria-hidden="true">
+          {frame}
+        </pre>
+
+        <div className="vending-machine-console">
+          <div className="vending-machine-controls">
+            <span className="vending-machine-arrow" aria-hidden="true">
+              -----------&gt;
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary vending-machine-button"
+              onClick={handleVend}
+              disabled={stageIndex !== null}
+            >
+              Click me
+            </button>
+          </div>
+
+          <p className="vending-machine-status" aria-live="polite">
+            {activeStage.statusCopy}
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1521,6 +1777,8 @@ export default function App() {
           </Fragment>
         ))}
       </section>
+
+      <AsciiVendingMachine />
 
       <section className="regime-theater">
         <div className="dash-heading">
