@@ -4,17 +4,20 @@
 	"type": "module",
 	"scripts": {
 		"build:contracts": "forge build src/AGCToken.sol src/StabilityVault.sol src/RewardDistributor.sol src/SettlementRouter.sol src/PolicyEngine.sol src/AGCHook.sol && forge build src/PolicyController.sol --via-ir",
-		"test": "pnpm test:agchook && pnpm test:reward && pnpm test:router && pnpm test:policy",
+		"test": "pnpm test:agchook && pnpm test:reward && pnpm test:router && pnpm test:policy && pnpm test:service",
 		"test:agchook": "forge test --match-path test/agchook/AGCHook.t.sol --skip PolicyController.sol --offline",
 		"test:reward": "forge test --match-path test/reward/RewardDistributor.t.sol --skip AGCHook.sol --skip PolicyController.sol --offline --via-ir",
 		"test:router": "forge test --match-path test/router/SettlementRouter.t.sol --skip AGCHook.sol --skip PolicyController.sol --offline --via-ir",
 		"test:policy": "forge test --match-path test/policy/PolicyController.t.sol --skip AGCHook.sol --offline --via-ir",
+		"test:service": "tsx --test service/facilitator/lib.test.ts",
 		"test:gas": "forge test --match-path test/agchook/AGCHook.t.sol --skip PolicyController.sol --gas-report --offline && forge test --match-path test/reward/RewardDistributor.t.sol --skip AGCHook.sol --skip PolicyController.sol --gas-report --offline --via-ir && forge test --match-path test/router/SettlementRouter.t.sol --skip AGCHook.sol --skip PolicyController.sol --gas-report --offline --via-ir && forge test --match-path test/policy/PolicyController.t.sol --skip AGCHook.sol --gas-report --offline --via-ir",
 		"format:contracts": "forge fmt",
 		"build:web": "vite build --config web/vite.config.ts",
 		"dev:web": "vite --config web/vite.config.ts",
+		"dev:facilitator": "tsx service/facilitator/index.ts",
 		"generate:abis": "node script/exportAbis.mjs",
-		"deploy:local": "node script/deployLocal.mjs"
+		"deploy:local": "node script/deployLocal.mjs",
+		"simulate:policy": "node script/simulatePolicy.mjs"
 	},
 	"dependencies": {
 		"@tanstack/react-query": "^5.95.2",

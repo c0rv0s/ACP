@@ -6,6 +6,7 @@ import {
   createPublicClient,
   createWalletClient,
   encodeDeployData,
+  encodeFunctionData,
   getCreate2Address,
   http,
   keccak256,
@@ -25,11 +26,16 @@ const contractRefs = {
   HookDeployer: { identifier: "HookDeployer", contractsPath: "script" },
   MockUSDC: { identifier: "src/mocks/MockUSDC.sol:MockUSDC" },
   PolicyController: { identifier: "src/PolicyController.sol:PolicyController" },
+  PolicyEngine: { identifier: "src/PolicyEngine.sol:PolicyEngine" },
   PoolManager: { identifier: "PoolManager", contractsPath: "lib/v4-core/src" },
   PoolModifyLiquidityTest: { identifier: "PoolModifyLiquidityTest", contractsPath: "lib/v4-core/src/test" },
   RewardDistributor: { identifier: "src/RewardDistributor.sol:RewardDistributor" },
   SettlementRouter: { identifier: "src/SettlementRouter.sol:SettlementRouter" },
   StabilityVault: { identifier: "src/StabilityVault.sol:StabilityVault" },
+  TimelockController: {
+    identifier: "TimelockController",
+    contractsPath: "lib/openzeppelin-contracts/contracts/governance",
+  },
 };
 
 const REQUIRED_HOOK_FLAGS =
@@ -177,6 +183,33 @@ async function writeContract(walletClient, publicClient, { address, abi, functio
   return publicClient.waitForTransactionReceipt({ hash });
 }
 
+async function scheduleAndExecuteTimelockOperation(
+  walletClient,
+  publicClient,
+  timelock,
+  {
+    target,
+    data,
+    value = 0n,
+    predecessor = zeroHash,
+    salt = zeroHash,
+    delay = 0n,
+  },
+) {
+  await writeContract(walletClient, publicClient, {
+    address: timelock.address,
+    abi: timelock.abi,
+    functionName: "schedule",
+    args: [target, value, data, predecessor, salt, delay],
+  });
+  await writeContract(walletClient, publicClient, {
+    address: timelock.address,
+    abi: timelock.abi,
+    functionName: "execute",
+    args: [target, value, data, predecessor, salt],
+  });
+}
+
 async function main() {
   const privateKey = process.env.PRIVATE_KEY;
   if (!privateKey) {
@@ -184,7 +217,11 @@ async function main() {
   }
 
   const rpcUrl = process.env.RPC_URL ?? "http://127.0.0.1:8545";
+  const timelockDelay = BigInt(process.env.TIMELOCK_MIN_DELAY ?? "0");
+  const facilitatorPrivateKey = process.env.FACILITATOR_PRIVATE_KEY ?? privateKey;
+  const facilitatorApiUrl = process.env.FACILITATOR_API_URL ?? "http://127.0.0.1:8787";
   const account = privateKeyToAccount(privateKey);
+  const facilitatorAccount = privateKeyToAccount(facilitatorPrivateKey);
   const publicClient = createPublicClient({ chain: anvil, transport: http(rpcUrl) });
   const walletClient = createWalletClient({ account, chain: anvil, transport: http(rpcUrl) });
 
@@ -244,6 +281,7 @@ async function main() {
     agc.address,
     hook.address,
   ]);
+  const engine = await deployContract(walletClient, publicClient, "PolicyEngine");
   const router = await deployContract(walletClient, publicClient, "SettlementRouter", [
     account.address,
     agc.address,
@@ -252,13 +290,19 @@ async function main() {
     hook.address,
     vault.address,
   ]);
+  const timelock = await deployContract(walletClient, publicClient, "TimelockController", [
+    timelockDelay,
+    [account.address],
+    [account.address],
+    account.address,
+  ]);
   const controller = await deployContract(
     walletClient,
     publicClient,
     "PolicyController",
     [
       account.address,
-      [agc.address, hook.address, vault.address, distributor.address, router.address],
+      [agc.address, hook.address, vault.address, distributor.address, router.address, engine.address],
       10n ** 18n,
       policyParamArgs(),
       rewardSplitArgs(),
@@ -273,11 +317,14 @@ async function main() {
   const usdcAbi = await inspect("MockUSDC", "abi");
   const vaultAbi = await inspect("StabilityVault", "abi");
   const distributorAbi = await inspect("RewardDistributor", "abi");
+  const engineAbi = await inspect("PolicyEngine", "abi");
   const routerAbi = await inspect("SettlementRouter", "abi");
   const controllerAbi = await inspect("PolicyController", "abi", { viaIr: true });
+  const timelockAbi = await inspect("TimelockController", "abi");
   const poolManagerAbi = await inspect("PoolManager", "abi");
   const liquidityHelperAbi = await inspect("PoolModifyLiquidityTest", "abi");
 
+  const defaultAdminRole = zeroHash;
   const minterRole = keccak256(stringToHex("MINTER_ROLE"));
   const burnerRole = keccak256(stringToHex("BURNER_ROLE"));
 
@@ -304,6 +351,12 @@ async function main() {
     abi: agcAbi,
     functionName: "grantRole",
     args: [burnerRole, router.address],
+  });
+  await writeContract(walletClient, publicClient, {
+    address: agc.address,
+    abi: agcAbi,
+    functionName: "grantRole",
+    args: [defaultAdminRole, timelock.address],
   });
 
   await writeContract(walletClient, publicClient, {
@@ -345,8 +398,20 @@ async function main() {
   await writeContract(walletClient, publicClient, {
     address: router.address,
     abi: routerAbi,
+    functionName: "setTrustedFacilitator",
+    args: [facilitatorAccount.address, true],
+  });
+  await writeContract(walletClient, publicClient, {
+    address: router.address,
+    abi: routerAbi,
     functionName: "setController",
     args: [controller.address],
+  });
+  await writeContract(walletClient, publicClient, {
+    address: controller.address,
+    abi: controllerAbi,
+    functionName: "setKeeper",
+    args: [account.address, true],
   });
 
   await writeContract(walletClient, publicClient, {
@@ -419,16 +484,57 @@ async function main() {
     ],
   });
 
+  const ownables = [
+    { address: vault.address, abi: vaultAbi },
+    { address: hook.address, abi: hook.abi },
+    { address: distributor.address, abi: distributorAbi },
+    { address: router.address, abi: routerAbi },
+    { address: controller.address, abi: controllerAbi },
+  ];
+
+  for (const ownable of ownables) {
+    await writeContract(walletClient, publicClient, {
+      address: ownable.address,
+      abi: ownable.abi,
+      functionName: "transferOwnership",
+      args: [timelock.address],
+    });
+
+    if (timelockDelay === 0n) {
+      await scheduleAndExecuteTimelockOperation(walletClient, publicClient, { address: timelock.address, abi: timelockAbi }, {
+        target: ownable.address,
+        data: encodeFunctionData({
+          abi: ownable.abi,
+          functionName: "acceptOwnership",
+        }),
+        salt: keccak256(stringToHex(`accept-ownership:${ownable.address}`)),
+        delay: timelockDelay,
+      });
+    }
+  }
+
+  await writeContract(walletClient, publicClient, {
+    address: agc.address,
+    abi: agcAbi,
+    functionName: "renounceRole",
+    args: [defaultAdminRole, account.address],
+  });
+
   const deployment = {
     admin: account.address,
+    facilitator: facilitatorAccount.address,
+    facilitatorApiUrl,
     agc: agc.address,
     usdc: usdc.address,
     poolManager: poolManager.address,
     hook: hook.address,
     vault: vault.address,
+    policyEngine: engine.address,
     rewardDistributor: distributor.address,
     settlementRouter: router.address,
     policyController: controller.address,
+    timelock: timelock.address,
+    timelockDelay: timelockDelay.toString(),
     liquidityHelper: liquidityHelper.address,
     sqrtPriceX96: sqrtPriceX96.toString(),
     tickLower,
@@ -450,9 +556,12 @@ async function main() {
     [
       `VITE_RPC_URL=${rpcUrl}`,
       `VITE_AGC_ADDRESS=${agc.address}`,
+      `VITE_HOOK_ADDRESS=${hook.address}`,
+      `VITE_POLICY_ENGINE_ADDRESS=${engine.address}`,
       `VITE_POLICY_CONTROLLER_ADDRESS=${controller.address}`,
       `VITE_REWARD_DISTRIBUTOR_ADDRESS=${distributor.address}`,
       `VITE_SETTLEMENT_ROUTER_ADDRESS=${router.address}`,
+      `VITE_FACILITATOR_API_URL=${facilitatorApiUrl}`,
       "",
     ].join("\n"),
     "utf8",

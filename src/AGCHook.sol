@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
-import {BalanceDelta, BalanceDeltaLibrary, toBalanceDelta} from "v4-core/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
-import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
-import {IAGCHook} from "./interfaces/IAGCHook.sol";
-import {AGCDataTypes} from "./libraries/AGCDataTypes.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { IHooks } from "v4-core/interfaces/IHooks.sol";
+import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
+import { PoolKey } from "v4-core/types/PoolKey.sol";
+import { PoolId, PoolIdLibrary } from "v4-core/types/PoolId.sol";
+import { BalanceDelta, BalanceDeltaLibrary, toBalanceDelta } from "v4-core/types/BalanceDelta.sol";
+import { BeforeSwapDelta, BeforeSwapDeltaLibrary } from "v4-core/types/BeforeSwapDelta.sol";
+import { Currency, CurrencyLibrary } from "v4-core/types/Currency.sol";
+import { Hooks } from "v4-core/libraries/Hooks.sol";
+import { LPFeeLibrary } from "v4-core/libraries/LPFeeLibrary.sol";
+import { FullMath } from "v4-core/libraries/FullMath.sol";
+import { StateLibrary } from "v4-core/libraries/StateLibrary.sol";
+import { IAGCHook } from "./interfaces/IAGCHook.sol";
+import { AGCDataTypes } from "./libraries/AGCDataTypes.sol";
 
 contract AGCHook is Ownable2Step, IHooks, IAGCHook {
     using BalanceDeltaLibrary for BalanceDelta;
@@ -26,6 +28,8 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
     error InvalidController();
     error InvalidRewardDistributor();
     error UnsupportedDecimalConfig();
+    error RewardReceiptNotFound();
+    error RewardReceiptConsumed();
 
     event ControllerUpdated(address indexed controller);
     event RewardDistributorUpdated(address indexed distributor);
@@ -45,7 +49,9 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         bytes32 intentHash,
         uint256 usdcAmount
     );
-    event EpochSnapshotConsumed(uint64 indexed epochId, uint256 totalVolume, uint256 productiveVolume);
+    event EpochSnapshotConsumed(
+        uint64 indexed epochId, uint256 totalVolume, uint256 productiveVolume
+    );
 
     struct SwapFootprint {
         uint256 agcAmount;
@@ -81,10 +87,10 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
     mapping(bytes32 positionKey => uint40 addedAt) public positionAge;
     mapping(address user => uint64 lastEpochSeen) public lastProductiveEpochSeen;
 
-    uint160 internal constant REQUIRED_HOOK_FLAGS =
-        Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
-            | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
-            | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG;
+    uint160 internal constant REQUIRED_HOOK_FLAGS = Hooks.BEFORE_ADD_LIQUIDITY_FLAG
+        | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
+        | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_RETURNS_DELTA_FLAG;
 
     constructor(
         address admin,
@@ -95,7 +101,8 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
     ) Ownable(admin) {
         if (poolConfig.agcDecimals < poolConfig.usdcDecimals) revert UnsupportedDecimalConfig();
 
-        bool agcFirst = Currency.unwrap(poolConfig.agcCurrency) < Currency.unwrap(poolConfig.usdcCurrency);
+        bool agcFirst =
+            Currency.unwrap(poolConfig.agcCurrency) < Currency.unwrap(poolConfig.usdcCurrency);
         PoolKey memory poolKey = PoolKey({
             currency0: agcFirst ? poolConfig.agcCurrency : poolConfig.usdcCurrency,
             currency1: agcFirst ? poolConfig.usdcCurrency : poolConfig.agcCurrency,
@@ -161,31 +168,44 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         return _currentAccumulator;
     }
 
-    function rewardReceipt(uint256 receiptId) external view returns (AGCDataTypes.RewardReceipt memory) {
+    function rewardReceipt(
+        uint256 receiptId
+    ) external view returns (AGCDataTypes.RewardReceipt memory) {
         return _rewardReceipt[receiptId];
     }
 
-    function setController(address nextController) external onlyOwner {
+    function setController(
+        address nextController
+    ) external onlyOwner {
         controller = nextController;
         emit ControllerUpdated(nextController);
     }
 
-    function setRewardDistributor(address distributor) external onlyOwner {
+    function setRewardDistributor(
+        address distributor
+    ) external onlyOwner {
         rewardDistributor = distributor;
         emit RewardDistributorUpdated(distributor);
     }
 
-    function setTrustedRouter(address router, bool trusted) external onlyOwner {
+    function setTrustedRouter(
+        address router,
+        bool trusted
+    ) external onlyOwner {
         trustedRouters[router] = trusted;
         emit TrustedRouterUpdated(router, trusted);
     }
 
-    function setRegime(AGCDataTypes.Regime newRegime) external onlyControllerOrOwner {
+    function setRegime(
+        AGCDataTypes.Regime newRegime
+    ) external onlyControllerOrOwner {
         currentRegime = newRegime;
         emit RegimeUpdated(newRegime);
     }
 
-    function setFeeConfig(AGCDataTypes.HookFeeConfig calldata newConfig) external onlyOwner {
+    function setFeeConfig(
+        AGCDataTypes.HookFeeConfig calldata newConfig
+    ) external onlyOwner {
         _feeConfig = newConfig;
         emit FeeConfigUpdated(
             newConfig.baseLPFee,
@@ -196,59 +216,67 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         );
     }
 
-    function previewMetadata(address router, bytes calldata hookData)
-        external
-        view
-        returns (AGCDataTypes.HookMetadata memory)
-    {
+    function previewMetadata(
+        address router,
+        bytes calldata hookData
+    ) external view returns (AGCDataTypes.HookMetadata memory) {
         return _metadataFrom(router, hookData);
     }
 
-    function consumeEpochSnapshot() external onlyController returns (AGCDataTypes.EpochSnapshot memory snapshot) {
-        AGCDataTypes.EpochAccumulator memory acc = _currentAccumulator;
+    function previewEpochSnapshot()
+        external
+        view
+        returns (AGCDataTypes.EpochSnapshot memory snapshot)
+    {
+        return _previewEpochSnapshot(_currentAccumulator, _currentMidPriceX18());
+    }
 
-        snapshot = AGCDataTypes.EpochSnapshot({
-            epochId: acc.epochId,
-            startedAt: acc.startedAt,
-            endedAt: uint64(block.timestamp),
-            productiveVolume: acc.productiveVolume,
-            totalVolume: acc.totalVolume,
-            netExitVolume: acc.netExitVolume,
-            shortTwapPriceX18: acc.sampleCount == 0 ? 0 : acc.cumulativePriceX18 / acc.sampleCount,
-            productiveSettlementPriceX18: acc.productiveSettlementCount == 0
-                ? 0
-                : acc.cumulativeProductivePriceX18 / acc.productiveSettlementCount,
-            realizedVolatilityBps: _volatilityBps(acc),
-            productiveSettlementCount: acc.productiveSettlementCount,
-            productiveUsers: acc.productiveUsers,
-            repeatUsers: acc.repeatUsers,
-            totalHookFeesUsdc: acc.totalHookFeesUsdc,
-            totalHookFeesAgc: acc.totalHookFeesAgc
-        });
+    function consumeEpochSnapshot()
+        external
+        onlyController
+        returns (AGCDataTypes.EpochSnapshot memory snapshot)
+    {
+        uint256 currentMidPriceX18 = _currentMidPriceX18();
+        snapshot = _previewEpochSnapshot(_currentAccumulator, currentMidPriceX18);
 
-        emit EpochSnapshotConsumed(snapshot.epochId, snapshot.totalVolume, snapshot.productiveVolume);
+        emit EpochSnapshotConsumed(
+            snapshot.epochId, snapshot.totalVolume, snapshot.productiveVolume
+        );
 
         delete _currentAccumulator;
         _currentAccumulator.epochId = snapshot.epochId + 1;
         _currentAccumulator.startedAt = uint64(block.timestamp);
         _currentAccumulator.updatedAt = uint64(block.timestamp);
+        _seedObservation(currentMidPriceX18);
     }
 
-    function consumeRewardReceipt(uint256 receiptId)
-        external
-        onlyRewardDistributor
-        returns (AGCDataTypes.RewardReceipt memory receipt)
-    {
-        receipt = _rewardReceipt[receiptId];
-        receipt.consumed = true;
-        _rewardReceipt[receiptId].consumed = true;
+    function consumeRewardReceipt(
+        uint256 receiptId
+    ) external onlyRewardDistributor returns (AGCDataTypes.RewardReceipt memory receipt) {
+        AGCDataTypes.RewardReceipt storage storedReceipt = _rewardReceipt[receiptId];
+        if (storedReceipt.beneficiary == address(0)) revert RewardReceiptNotFound();
+        if (storedReceipt.consumed) revert RewardReceiptConsumed();
+
+        receipt = storedReceipt;
+        storedReceipt.consumed = true;
     }
 
-    function beforeInitialize(address, PoolKey calldata, uint160) external pure returns (bytes4) {
+    function beforeInitialize(
+        address,
+        PoolKey calldata,
+        uint160
+    ) external pure returns (bytes4) {
         return IHooks.beforeInitialize.selector;
     }
 
-    function afterInitialize(address, PoolKey calldata, uint160, int24) external pure returns (bytes4) {
+    function afterInitialize(
+        address,
+        PoolKey calldata key,
+        uint160 sqrtPriceX96,
+        int24
+    ) external onlyPoolManager returns (bytes4) {
+        _validatePool(key);
+        _seedObservation(_priceFromSqrtPriceX96(sqrtPriceX96));
         return IHooks.afterInitialize.selector;
     }
 
@@ -259,6 +287,7 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         bytes calldata
     ) external onlyPoolManager returns (bytes4) {
         _validatePool(key);
+        _observeMidPrice();
 
         bytes32 positionKeyHash = _positionKey(sender, params);
         if (positionAge[positionKeyHash] == 0) {
@@ -287,6 +316,7 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         bytes calldata
     ) external onlyPoolManager returns (bytes4) {
         _validatePool(key);
+        _observeMidPrice();
         return IHooks.beforeRemoveLiquidity.selector;
     }
 
@@ -316,8 +346,10 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
             return (IHooks.afterRemoveLiquidity.selector, toBalanceDelta(0, 0));
         }
 
-        uint256 feeAmount0 = uint128(amount0) * _feeConfig.earlyWithdrawalFee / AGCDataTypes.FEE_UNITS;
-        uint256 feeAmount1 = uint128(amount1) * _feeConfig.earlyWithdrawalFee / AGCDataTypes.FEE_UNITS;
+        uint256 feeAmount0 =
+            uint128(amount0) * _feeConfig.earlyWithdrawalFee / AGCDataTypes.FEE_UNITS;
+        uint256 feeAmount1 =
+            uint128(amount1) * _feeConfig.earlyWithdrawalFee / AGCDataTypes.FEE_UNITS;
 
         _collectHookFee(key.currency0, feeAmount0);
         _collectHookFee(key.currency1, feeAmount1);
@@ -354,7 +386,7 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         SwapFootprint memory footprint = _swapFootprint(delta, key, params);
 
         hookDelta = _collectSwapFee(metadata.flowClass, footprint.agcToUsdc, key, params, delta);
-        _updateAccumulator(metadata, footprint.usdcAmount, footprint.executionPriceX18, footprint.agcToUsdc);
+        _updateAccumulator(metadata, footprint, _currentMidPriceX18());
 
         if (
             metadata.flowClass == AGCDataTypes.FlowClass.ProductivePayment && footprint.agcToUsdc
@@ -366,23 +398,36 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         return (IHooks.afterSwap.selector, hookDelta);
     }
 
-    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata) external pure returns (bytes4) {
+    function beforeDonate(
+        address,
+        PoolKey calldata,
+        uint256,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
         return IHooks.beforeDonate.selector;
     }
 
-    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata) external pure returns (bytes4) {
+    function afterDonate(
+        address,
+        PoolKey calldata,
+        uint256,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
         return IHooks.afterDonate.selector;
     }
 
-    function _validatePool(PoolKey calldata key) internal view {
+    function _validatePool(
+        PoolKey calldata key
+    ) internal view {
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(_canonicalPoolId)) revert InvalidPool();
     }
 
-    function _metadataFrom(address router, bytes calldata hookData)
-        internal
-        view
-        returns (AGCDataTypes.HookMetadata memory metadata)
-    {
+    function _metadataFrom(
+        address router,
+        bytes calldata hookData
+    ) internal view returns (AGCDataTypes.HookMetadata memory metadata) {
         metadata.originalSender = router;
         metadata.beneficiary = router;
         metadata.flowClass = AGCDataTypes.FlowClass.Unknown;
@@ -404,15 +449,19 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         }
     }
 
-    function _positionKey(address provider, IPoolManager.ModifyLiquidityParams calldata params)
-        internal
-        view
-        returns (bytes32)
-    {
-        return keccak256(abi.encode(provider, _canonicalPoolId, params.tickLower, params.tickUpper, params.salt));
+    function _positionKey(
+        address provider,
+        IPoolManager.ModifyLiquidityParams calldata params
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(provider, _canonicalPoolId, params.tickLower, params.tickUpper, params.salt)
+        );
     }
 
-    function _hookFee(AGCDataTypes.FlowClass flowClass, bool agcToUsdc) internal view returns (uint24 feeUnits) {
+    function _hookFee(
+        AGCDataTypes.FlowClass flowClass,
+        bool agcToUsdc
+    ) internal view returns (uint24 feeUnits) {
         if (flowClass == AGCDataTypes.FlowClass.ProductivePayment) {
             feeUnits = _feeConfig.productiveHookFee;
         } else if (flowClass == AGCDataTypes.FlowClass.InventoryRebalance) {
@@ -433,17 +482,29 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         }
     }
 
-    function _dynamicLPFee(AGCDataTypes.FlowClass flowClass, bool agcToUsdc) internal view returns (uint24 feeUnits) {
+    function _dynamicLPFee(
+        AGCDataTypes.FlowClass flowClass,
+        bool agcToUsdc
+    ) internal view returns (uint24 feeUnits) {
         feeUnits = _feeConfig.baseLPFee;
-        feeUnits += uint24(_previewVolatilityBps() * _feeConfig.volatilityFeeSlope / AGCDataTypes.BPS);
-        feeUnits += uint24(_previewExitPressureBps() * _feeConfig.imbalanceFeeSlope / AGCDataTypes.BPS);
+        feeUnits += uint24(
+            _previewVolatilityBps() * _feeConfig.volatilityFeeSlope / AGCDataTypes.BPS
+        );
+        feeUnits += uint24(
+            _previewExitPressureBps() * _feeConfig.imbalanceFeeSlope / AGCDataTypes.BPS
+        );
 
         if (flowClass == AGCDataTypes.FlowClass.ProductivePayment) {
-            feeUnits = feeUnits > _feeConfig.productiveDiscount ? feeUnits - _feeConfig.productiveDiscount : 0;
+            feeUnits = feeUnits > _feeConfig.productiveDiscount
+                ? feeUnits - _feeConfig.productiveDiscount
+                : 0;
         } else if (flowClass == AGCDataTypes.FlowClass.InventoryRebalance) {
-            feeUnits = feeUnits > _feeConfig.inventoryDiscount ? feeUnits - _feeConfig.inventoryDiscount : 0;
+            feeUnits = feeUnits > _feeConfig.inventoryDiscount
+                ? feeUnits - _feeConfig.inventoryDiscount
+                : 0;
         } else if (
-            flowClass == AGCDataTypes.FlowClass.SpeculativeTrade || flowClass == AGCDataTypes.FlowClass.Unknown
+            flowClass == AGCDataTypes.FlowClass.SpeculativeTrade
+                || flowClass == AGCDataTypes.FlowClass.Unknown
         ) {
             feeUnits += _feeConfig.speculativeSurcharge;
         }
@@ -466,16 +527,15 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
             return 0;
         }
 
-        return uint256(_currentAccumulator.netExitVolume) * AGCDataTypes.BPS / _currentAccumulator.totalVolume;
+        return uint256(_currentAccumulator.netExitVolume) * AGCDataTypes.BPS
+            / _currentAccumulator.totalVolume;
     }
 
-    function _volatilityBps(AGCDataTypes.EpochAccumulator memory acc) internal pure returns (uint256) {
-        if (acc.sampleCount <= 1) return 0;
-
-        uint256 averagePrice = acc.cumulativePriceX18 / acc.sampleCount;
-        if (averagePrice == 0) return 0;
-
-        return acc.cumulativeAbsPriceChangeX18 * AGCDataTypes.BPS / (averagePrice * (acc.sampleCount - 1));
+    function _volatilityBps(
+        AGCDataTypes.EpochAccumulator memory acc
+    ) internal pure returns (uint256) {
+        if (acc.observationCount <= 1) return 0;
+        return acc.cumulativeAbsMidPriceChangeBps / (acc.observationCount - 1);
     }
 
     function _unspecifiedCurrencyAndAmount(
@@ -492,16 +552,18 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         return (key.currency0, delta.amount0());
     }
 
-    function _isAgcToUsdc(PoolKey calldata key, IPoolManager.SwapParams calldata params) internal view returns (bool) {
+    function _isAgcToUsdc(
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params
+    ) internal view returns (bool) {
         (Currency inputCurrency, Currency outputCurrency) = _inputOutputCurrency(key, params);
         return inputCurrency == agcCurrency && outputCurrency == usdcCurrency;
     }
 
-    function _inputOutputCurrency(PoolKey calldata key, IPoolManager.SwapParams calldata params)
-        internal
-        pure
-        returns (Currency inputCurrency, Currency outputCurrency)
-    {
+    function _inputOutputCurrency(
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params
+    ) internal pure returns (Currency inputCurrency, Currency outputCurrency) {
         bool specifiedTokenIs0 = _specifiedTokenIs0(params);
 
         if (params.amountSpecified < 0) {
@@ -513,20 +575,45 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         }
     }
 
-    function _specifiedTokenIs0(IPoolManager.SwapParams calldata params) internal pure returns (bool) {
+    function _specifiedTokenIs0(
+        IPoolManager.SwapParams calldata params
+    ) internal pure returns (bool) {
         return (params.amountSpecified < 0) == params.zeroForOne;
     }
 
-    function _executionPriceX18(uint256 agcAmount, uint256 usdcAmount) internal view returns (uint256) {
+    function _currentMidPriceX18() internal view returns (uint256) {
+        (uint160 sqrtPriceX96,,,) = StateLibrary.getSlot0(manager, _canonicalPoolId);
+        return _priceFromSqrtPriceX96(sqrtPriceX96);
+    }
+
+    function _priceFromSqrtPriceX96(
+        uint160 sqrtPriceX96
+    ) internal view returns (uint256 priceX18) {
+        if (sqrtPriceX96 == 0) return 0;
+
+        uint256 ratioX96 =
+            FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), uint256(1) << 96);
+
+        if (agcIsCurrency0) {
+            return FullMath.mulDiv(ratioX96, _priceNumeratorScale, uint256(1) << 96);
+        }
+
+        return FullMath.mulDiv(_priceNumeratorScale, uint256(1) << 96, ratioX96);
+    }
+
+    function _executionPriceX18(
+        uint256 agcAmount,
+        uint256 usdcAmount
+    ) internal view returns (uint256) {
         if (agcAmount == 0 || usdcAmount == 0) return 0;
         return Math.mulDiv(usdcAmount, _priceNumeratorScale, agcAmount * _priceDenominatorScale);
     }
 
-    function _swapFootprint(BalanceDelta delta, PoolKey calldata key, IPoolManager.SwapParams calldata params)
-        internal
-        view
-        returns (SwapFootprint memory footprint)
-    {
+    function _swapFootprint(
+        BalanceDelta delta,
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata params
+    ) internal view returns (SwapFootprint memory footprint) {
         int128 delta0 = delta.amount0();
         int128 delta1 = delta.amount1();
 
@@ -543,7 +630,8 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         IPoolManager.SwapParams calldata params,
         BalanceDelta delta
     ) internal returns (int128 hookDelta) {
-        (Currency unspecifiedCurrency, int128 unspecifiedAmount) = _unspecifiedCurrencyAndAmount(key, params, delta);
+        (Currency unspecifiedCurrency, int128 unspecifiedAmount) =
+            _unspecifiedCurrencyAndAmount(key, params, delta);
         if (unspecifiedAmount == 0) {
             return 0;
         }
@@ -565,42 +653,121 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         return int128(uint128(hookFeeAmount));
     }
 
+    function _observeMidPrice() internal {
+        _observeMidPriceAtPrice(_currentMidPriceX18());
+    }
+
+    function _seedObservation(
+        uint256 currentMidPriceX18
+    ) internal {
+        if (currentMidPriceX18 == 0) return;
+
+        AGCDataTypes.EpochAccumulator storage acc = _currentAccumulator;
+        uint64 observedAt = uint64(block.timestamp);
+        acc.updatedAt = observedAt;
+        acc.lastObservedAt = observedAt;
+        acc.lastMidPriceX18 = currentMidPriceX18;
+        if (acc.observationCount == 0) {
+            acc.observationCount = 1;
+        }
+    }
+
+    function _observeMidPriceAtPrice(
+        uint256 currentMidPriceX18
+    ) internal {
+        if (currentMidPriceX18 == 0) return;
+
+        AGCDataTypes.EpochAccumulator storage acc = _currentAccumulator;
+        uint64 observedAt = uint64(block.timestamp);
+
+        if (acc.lastObservedAt == 0) {
+            _seedObservation(currentMidPriceX18);
+            return;
+        }
+
+        if (observedAt > acc.lastObservedAt && acc.lastMidPriceX18 > 0) {
+            uint256 elapsed = observedAt - acc.lastObservedAt;
+            acc.cumulativeMidPriceTimeX18 += acc.lastMidPriceX18 * elapsed;
+
+            uint256 priceChangeBps = currentMidPriceX18 > acc.lastMidPriceX18
+                ? (currentMidPriceX18 - acc.lastMidPriceX18) * AGCDataTypes.BPS
+                    / acc.lastMidPriceX18
+                : (acc.lastMidPriceX18 - currentMidPriceX18) * AGCDataTypes.BPS
+                    / acc.lastMidPriceX18;
+            acc.cumulativeAbsMidPriceChangeBps += priceChangeBps;
+            acc.observationCount += 1;
+            acc.lastObservedAt = observedAt;
+        }
+
+        acc.updatedAt = observedAt;
+        acc.lastMidPriceX18 = currentMidPriceX18;
+    }
+
+    function _previewEpochSnapshot(
+        AGCDataTypes.EpochAccumulator memory acc,
+        uint256 currentMidPriceX18
+    ) internal view returns (AGCDataTypes.EpochSnapshot memory snapshot) {
+        uint64 endedAt = uint64(block.timestamp);
+        uint256 cumulativeMidPriceTimeX18 = acc.cumulativeMidPriceTimeX18;
+        if (endedAt > acc.lastObservedAt && acc.lastMidPriceX18 > 0) {
+            cumulativeMidPriceTimeX18 += acc.lastMidPriceX18 * (endedAt - acc.lastObservedAt);
+        }
+
+        uint256 epochElapsed = endedAt > acc.startedAt ? endedAt - acc.startedAt : 0;
+        uint256 shortTwapPriceX18 = epochElapsed == 0
+            ? acc.lastMidPriceX18
+            : cumulativeMidPriceTimeX18 == 0 && acc.observationCount == 0
+                ? currentMidPriceX18
+                : cumulativeMidPriceTimeX18 / epochElapsed;
+
+        snapshot = AGCDataTypes.EpochSnapshot({
+            epochId: acc.epochId,
+            startedAt: acc.startedAt,
+            endedAt: endedAt,
+            productiveVolume: acc.productiveVolume,
+            totalVolume: acc.totalVolume,
+            netExitVolume: acc.netExitVolume,
+            shortTwapPriceX18: shortTwapPriceX18,
+            productiveSettlementPriceX18: acc.productiveVolume == 0
+                ? 0
+                : acc.cumulativeProductivePriceVolumeX18 / acc.productiveVolume,
+            realizedVolatilityBps: _volatilityBps(acc),
+            productiveSettlementCount: acc.productiveSettlementCount,
+            productiveUsers: acc.productiveUsers,
+            repeatUsers: acc.repeatUsers,
+            totalHookFeesUsdc: acc.totalHookFeesUsdc,
+            totalHookFeesAgc: acc.totalHookFeesAgc
+        });
+    }
+
     function _updateAccumulator(
         AGCDataTypes.HookMetadata memory metadata,
-        uint256 usdcVolume,
-        uint256 executionPriceX18,
-        bool agcToUsdc
+        SwapFootprint memory footprint,
+        uint256 currentMidPriceX18
     ) internal {
         AGCDataTypes.EpochAccumulator storage acc = _currentAccumulator;
 
-        acc.updatedAt = uint64(block.timestamp);
-        acc.sampleCount += 1;
-        acc.totalVolume += usdcVolume;
-        acc.cumulativePriceX18 += executionPriceX18;
+        _observeMidPriceAtPrice(currentMidPriceX18);
+        acc.totalVolume += footprint.usdcAmount;
 
-        if (acc.lastPriceX18 != 0 && executionPriceX18 > 0) {
-            acc.cumulativeAbsPriceChangeX18 += executionPriceX18 > acc.lastPriceX18
-                ? executionPriceX18 - acc.lastPriceX18
-                : acc.lastPriceX18 - executionPriceX18;
-        }
-
-        acc.lastPriceX18 = executionPriceX18;
-
-        if (agcToUsdc) {
-            acc.netExitVolume += int256(usdcVolume);
+        if (footprint.agcToUsdc) {
+            acc.netExitVolume += int256(footprint.usdcAmount);
         } else {
-            acc.netExitVolume -= int256(usdcVolume);
+            acc.netExitVolume -= int256(footprint.usdcAmount);
         }
 
-        if (metadata.flowClass == AGCDataTypes.FlowClass.ProductivePayment && agcToUsdc) {
-            acc.productiveVolume += usdcVolume;
+        if (metadata.flowClass == AGCDataTypes.FlowClass.ProductivePayment && footprint.agcToUsdc) {
+            acc.productiveVolume += footprint.usdcAmount;
             acc.productiveSettlementCount += 1;
-            acc.cumulativeProductivePriceX18 += executionPriceX18;
+            acc.cumulativeProductivePriceVolumeX18 += footprint.executionPriceX18
+            * footprint.usdcAmount;
             _trackProductiveUser(metadata.originalSender);
         }
     }
 
-    function _trackProductiveUser(address user) internal {
+    function _trackProductiveUser(
+        address user
+    ) internal {
         AGCDataTypes.EpochAccumulator storage acc = _currentAccumulator;
         if (lastProductiveEpochSeen[user] == acc.epochId) {
             return;
@@ -635,10 +802,19 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
             consumed: false
         });
 
-        emit RewardReceiptCreated(receiptId, _currentAccumulator.epochId, metadata.beneficiary, metadata.intentHash, usdcAmount);
+        emit RewardReceiptCreated(
+            receiptId,
+            _currentAccumulator.epochId,
+            metadata.beneficiary,
+            metadata.intentHash,
+            usdcAmount
+        );
     }
 
-    function _recordFee(Currency currency, uint256 amount) internal {
+    function _recordFee(
+        Currency currency,
+        uint256 amount
+    ) internal {
         if (currency == usdcCurrency) {
             _currentAccumulator.totalHookFeesUsdc += amount;
         } else if (currency == agcCurrency) {
@@ -646,7 +822,10 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         }
     }
 
-    function _collectHookFee(Currency currency, uint256 amount) internal {
+    function _collectHookFee(
+        Currency currency,
+        uint256 amount
+    ) internal {
         if (amount == 0) return;
 
         manager.take(currency, address(this), amount);
@@ -654,7 +833,9 @@ contract AGCHook is Ownable2Step, IHooks, IAGCHook {
         _recordFee(currency, amount);
     }
 
-    function _abs(int128 value) internal pure returns (int128) {
+    function _abs(
+        int128 value
+    ) internal pure returns (int128) {
         return value < 0 ? -value : value;
     }
 }

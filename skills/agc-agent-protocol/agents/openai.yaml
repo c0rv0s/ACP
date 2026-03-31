@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGC Agent Protocol"
+  short_description: "Guide agents through AGC payments and rewards."
+  default_prompt: "Use $agc-agent-protocol to explain AGC payment flows, facilitator attestations, and reward claims."

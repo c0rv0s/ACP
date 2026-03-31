@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AGCToken} from "./AGCToken.sol";
-import {IAGCHook} from "./interfaces/IAGCHook.sol";
-import {IRewardDistributor} from "./interfaces/IRewardDistributor.sol";
-import {AGCDataTypes} from "./libraries/AGCDataTypes.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { AGCToken } from "./AGCToken.sol";
+import { IAGCHook } from "./interfaces/IAGCHook.sol";
+import { IRewardDistributor } from "./interfaces/IRewardDistributor.sol";
+import { AGCDataTypes } from "./libraries/AGCDataTypes.sol";
 
 contract RewardDistributor is Ownable2Step, IRewardDistributor {
     using SafeERC20 for AGCToken;
@@ -19,11 +19,17 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
     error WrongBeneficiary();
     error StreamNotFound();
     error NothingToClaim();
+    error ReceiptClaimsPaused();
+    error StreamSchedulingPaused();
 
     event ControllerUpdated(address indexed controller);
     event RewardParametersUpdated(uint256 baseRewardRateX18, uint256 rewardScale);
     event DurationsUpdated(uint64 agentDuration, uint64 lpDuration, uint64 integratorDuration);
-    event EpochFunded(uint64 indexed epochId, uint256 agentBudget, uint256 lpBudget, uint256 integratorBudget);
+    event ClaimPauseUpdated(bool receiptClaimsPaused);
+    event StreamSchedulingPauseUpdated(bool streamSchedulingPaused);
+    event EpochFunded(
+        uint64 indexed epochId, uint256 agentBudget, uint256 lpBudget, uint256 integratorBudget
+    );
     event StreamScheduled(
         uint256 indexed streamId,
         uint64 indexed epochId,
@@ -34,7 +40,12 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         uint64 endTime,
         bytes32 source
     );
-    event ReceiptClaimed(uint256 indexed receiptId, uint256 indexed streamId, address indexed beneficiary, uint256 amount);
+    event ReceiptClaimed(
+        uint256 indexed receiptId,
+        uint256 indexed streamId,
+        address indexed beneficiary,
+        uint256 amount
+    );
     event StreamClaimed(uint256 indexed streamId, address indexed beneficiary, uint256 amount);
 
     AGCToken public immutable agc;
@@ -48,13 +59,19 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
     uint64 public agentStreamDuration;
     uint64 public lpStreamDuration;
     uint64 public integratorStreamDuration;
+    bool public receiptClaimsPaused;
+    bool public streamSchedulingPaused;
 
     uint256 public nextStreamId = 1;
 
     mapping(uint64 epochId => AGCDataTypes.RewardBudget budget) public epochBudget;
     mapping(uint256 streamId => AGCDataTypes.RewardStream stream) public rewardStream;
 
-    constructor(address admin, AGCToken agcToken, IAGCHook hookContract) Ownable(admin) {
+    constructor(
+        address admin,
+        AGCToken agcToken,
+        IAGCHook hookContract
+    ) Ownable(admin) {
         agc = agcToken;
         hook = hookContract;
 
@@ -70,22 +87,30 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         _;
     }
 
-    function setController(address nextController) external onlyOwner {
+    function setController(
+        address nextController
+    ) external onlyOwner {
         controller = nextController;
         emit ControllerUpdated(nextController);
     }
 
-    function setRewardParameters(uint256 newBaseRewardRateX18, uint256 newRewardScale) external onlyOwner {
+    function setRewardParameters(
+        uint256 newBaseRewardRateX18,
+        uint256 newRewardScale
+    ) external onlyOwner {
         baseRewardRateX18 = newBaseRewardRateX18;
         rewardScale = newRewardScale;
         emit RewardParametersUpdated(newBaseRewardRateX18, newRewardScale);
     }
 
-    function setStreamDurations(uint64 newAgentDuration, uint64 newLpDuration, uint64 newIntegratorDuration)
-        external
-        onlyOwner
-    {
-        if (newAgentDuration == 0 || newLpDuration == 0 || newIntegratorDuration == 0) revert InvalidDuration();
+    function setStreamDurations(
+        uint64 newAgentDuration,
+        uint64 newLpDuration,
+        uint64 newIntegratorDuration
+    ) external onlyOwner {
+        if (newAgentDuration == 0 || newLpDuration == 0 || newIntegratorDuration == 0) {
+            revert InvalidDuration();
+        }
 
         agentStreamDuration = newAgentDuration;
         lpStreamDuration = newLpDuration;
@@ -94,10 +119,26 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         emit DurationsUpdated(newAgentDuration, newLpDuration, newIntegratorDuration);
     }
 
-    function fundEpoch(uint64 epochId, uint256 agentBudget, uint256 lpBudget, uint256 integratorBudget)
-        external
-        onlyController
-    {
+    function setReceiptClaimsPaused(
+        bool paused
+    ) external onlyOwner {
+        receiptClaimsPaused = paused;
+        emit ClaimPauseUpdated(paused);
+    }
+
+    function setStreamSchedulingPaused(
+        bool paused
+    ) external onlyOwner {
+        streamSchedulingPaused = paused;
+        emit StreamSchedulingPauseUpdated(paused);
+    }
+
+    function fundEpoch(
+        uint64 epochId,
+        uint256 agentBudget,
+        uint256 lpBudget,
+        uint256 integratorBudget
+    ) external onlyController {
         AGCDataTypes.RewardBudget storage budget = epochBudget[epochId];
         budget.agentBudget += agentBudget;
         budget.lpBudget += lpBudget;
@@ -118,17 +159,31 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         uint64 duration,
         bytes32 source
     ) external onlyController returns (uint256 streamId) {
+        if (streamSchedulingPaused) revert StreamSchedulingPaused();
         if (duration == 0) {
             duration = _defaultDuration(category);
         }
 
         _consumeBudget(epochId, category, amount);
         streamId = _createStream(beneficiary, category, amount, duration, source);
-        emit StreamScheduled(streamId, epochId, beneficiary, category, amount, uint64(block.timestamp), uint64(block.timestamp) + duration, source);
+        emit StreamScheduled(
+            streamId,
+            epochId,
+            beneficiary,
+            category,
+            amount,
+            uint64(block.timestamp),
+            uint64(block.timestamp) + duration,
+            source
+        );
     }
 
-    function claimProductiveReceipt(uint256 receiptId) external returns (uint256 streamId) {
+    function claimProductiveReceipt(
+        uint256 receiptId
+    ) external returns (uint256 streamId) {
+        if (receiptClaimsPaused) revert ReceiptClaimsPaused();
         AGCDataTypes.RewardReceipt memory receipt = hook.consumeRewardReceipt(receiptId);
+        if (receipt.consumed) revert NothingToClaim();
         if (receipt.beneficiary != msg.sender) revert WrongBeneficiary();
 
         AGCDataTypes.RewardBudget storage budget = epochBudget[receipt.epochId];
@@ -162,18 +217,24 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         emit ReceiptClaimed(receiptId, streamId, receipt.beneficiary, rewardAmount);
     }
 
-    function claimStream(uint256 streamId) external returns (uint256 claimedAmount) {
+    function claimStream(
+        uint256 streamId
+    ) external returns (uint256 claimedAmount) {
         claimedAmount = _claimStream(streamId, msg.sender);
     }
 
-    function claimStreams(uint256[] calldata streamIds) external returns (uint256 totalClaimed) {
+    function claimStreams(
+        uint256[] calldata streamIds
+    ) external returns (uint256 totalClaimed) {
         uint256 length = streamIds.length;
         for (uint256 i = 0; i < length; ++i) {
             totalClaimed += _claimStream(streamIds[i], msg.sender);
         }
     }
 
-    function previewClaimable(uint256 streamId) external view returns (uint256) {
+    function previewClaimable(
+        uint256 streamId
+    ) external view returns (uint256) {
         AGCDataTypes.RewardStream memory stream = rewardStream[streamId];
         if (stream.beneficiary == address(0)) {
             return 0;
@@ -182,12 +243,17 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         return _vestedAmount(stream) - stream.claimedAmount;
     }
 
-    function quoteReceiptReward(AGCDataTypes.RewardReceipt memory receipt) public view returns (uint256) {
+    function quoteReceiptReward(
+        AGCDataTypes.RewardReceipt memory receipt
+    ) public view returns (uint256) {
         uint256 grossReward = receipt.usdcAmount * baseRewardRateX18 / rewardScale;
         return grossReward * receipt.qualityScoreBps / AGCDataTypes.BPS;
     }
 
-    function _claimStream(uint256 streamId, address claimant) internal returns (uint256 claimedAmount) {
+    function _claimStream(
+        uint256 streamId,
+        address claimant
+    ) internal returns (uint256 claimedAmount) {
         AGCDataTypes.RewardStream storage stream = rewardStream[streamId];
         if (stream.beneficiary == address(0)) revert StreamNotFound();
         if (stream.beneficiary != claimant) revert WrongBeneficiary();
@@ -202,13 +268,19 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         emit StreamClaimed(streamId, claimant, claimedAmount);
     }
 
-    function _defaultDuration(AGCDataTypes.RewardCategory category) internal view returns (uint64) {
+    function _defaultDuration(
+        AGCDataTypes.RewardCategory category
+    ) internal view returns (uint64) {
         if (category == AGCDataTypes.RewardCategory.Agent) return agentStreamDuration;
         if (category == AGCDataTypes.RewardCategory.LP) return lpStreamDuration;
         return integratorStreamDuration;
     }
 
-    function _consumeBudget(uint64 epochId, AGCDataTypes.RewardCategory category, uint256 amount) internal {
+    function _consumeBudget(
+        uint64 epochId,
+        AGCDataTypes.RewardCategory category,
+        uint256 amount
+    ) internal {
         AGCDataTypes.RewardBudget storage budget = epochBudget[epochId];
         if (!budget.funded) revert EpochNotFunded();
 
@@ -249,7 +321,9 @@ contract RewardDistributor is Ownable2Step, IRewardDistributor {
         });
     }
 
-    function _vestedAmount(AGCDataTypes.RewardStream memory stream) internal view returns (uint256) {
+    function _vestedAmount(
+        AGCDataTypes.RewardStream memory stream
+    ) internal view returns (uint256) {
         if (block.timestamp <= stream.startTime) {
             return 0;
         }

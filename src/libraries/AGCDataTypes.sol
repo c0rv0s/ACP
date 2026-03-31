@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Currency} from "v4-core/types/Currency.sol";
+import { Currency } from "v4-core/types/Currency.sol";
 
 library AGCDataTypes {
     uint256 internal constant BPS = 10_000;
@@ -81,17 +81,18 @@ library AGCDataTypes {
         uint64 epochId;
         uint64 startedAt;
         uint64 updatedAt;
-        uint64 sampleCount;
+        uint64 lastObservedAt;
+        uint64 observationCount;
         uint64 productiveSettlementCount;
         uint64 productiveUsers;
         uint64 repeatUsers;
         uint256 productiveVolume;
         uint256 totalVolume;
         int256 netExitVolume;
-        uint256 cumulativePriceX18;
-        uint256 cumulativeProductivePriceX18;
-        uint256 lastPriceX18;
-        uint256 cumulativeAbsPriceChangeX18;
+        uint256 lastMidPriceX18;
+        uint256 cumulativeMidPriceTimeX18;
+        uint256 cumulativeProductivePriceVolumeX18;
+        uint256 cumulativeAbsMidPriceChangeBps;
         uint256 totalHookFeesUsdc;
         uint256 totalHookFeesAgc;
     }
@@ -159,6 +160,7 @@ library AGCDataTypes {
         uint256 anchorPriceX18;
         uint256 bandWidthBps;
         uint256 shortTwapPriceX18;
+        uint256 productiveSettlementPriceX18;
         uint256 productiveUsageBps;
         uint256 coverageBps;
         uint256 exitPressureBps;
@@ -166,6 +168,13 @@ library AGCDataTypes {
         uint256 repeatUserBps;
         uint256 mintBudget;
         uint256 buybackBudget;
+        uint256 floatSupply;
+        uint256 depthTo1Pct;
+        int256 productiveGrowthBps;
+        uint256 depthTo2Pct;
+        uint256 lpStabilityBps;
+        uint256 idleShareBps;
+        uint256 buybackMinAgcOut;
     }
 
     struct DerivedMetrics {

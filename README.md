@@ -1,6 +1,6 @@
 # Agent Credit Protocol
 
-Foundry + Uniswap v4 MVP for the Agent Credit Protocol, with a viem/wagmi dashboard under [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web).
+Foundry + Uniswap v4 launch-ready v1 implementation for the Agent Credit Protocol, with a viem/wagmi dashboard under [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web) and an in-repo facilitator service under [`/Users/nate/Desktop/agc/service/facilitator`](/Users/nate/Desktop/agc/service/facilitator).
 
 This README now serves two jobs:
 
@@ -9,34 +9,38 @@ This README now serves two jobs:
 
 ## Status
 
-The repo implements a conservative v1:
+The repo now implements the conservative v1 launch surface:
 
 - `AGCToken` with role-gated mint and burn
-- canonical `AGC/USDC` Uniswap v4 pool hook with dynamic LP fee overrides, hook fees, productive-flow receipts, oracle-style epoch accounting, and LP anti-JIT penalties
-- `PolicyController` for keeper-driven epoch settlement, mint caps, defense buybacks, and reward routing
-- `StabilityVault`, `RewardDistributor`, and `SettlementRouter`
-- viem local deployment script that mines a valid v4 hook address, initializes the pool, seeds liquidity, and writes frontend env vars
+- canonical `AGC/USDC` Uniswap v4 hook with dynamic LP fee overrides, time-weighted epoch observations, productive-flow receipts, and LP anti-JIT penalties
+- engine-driven `PolicyController` with `previewEpoch` / `settleEpoch`, deterministic regime selection, hybrid external metrics, defense buybacks, and reward routing
+- `StabilityVault`, `RewardDistributor`, and `SettlementRouter`, including productive-settlement pause and reward-claim / scheduling pause controls
+- an in-repo facilitator attestation service that signs productive payment intents for trusted partner routes
+- local deployment that mines a valid v4 hook address, deploys a timelock, initializes the pool, seeds liquidity, configures the facilitator, and writes frontend env vars
+- an offchain scenario simulator in [`/Users/nate/Desktop/agc/script/simulatePolicy.mjs`](/Users/nate/Desktop/agc/script/simulatePolicy.mjs)
 
 ## What Changed In The Implemented MVP
 
 The original prose spec was intentionally broader than the first code release. These are the important differences.
 
-### 1. Policy execution is split between snapshots and keeper commands
+### 1. Policy execution is hybrid and deterministic
 
-The spec describes a rich fully-determined epoch policy engine driven by onchain metrics and formulas. The MVP is narrower:
+The shipped controller now follows the spec much more closely:
 
-- [`/Users/nate/Desktop/agc/src/AGCHook.sol`](/Users/nate/Desktop/agc/src/AGCHook.sol) accumulates the fast-path epoch snapshot on every swap and liquidity action.
-- [`/Users/nate/Desktop/agc/src/PolicyController.sol`](/Users/nate/Desktop/agc/src/PolicyController.sol) validates a keeper-supplied `EpochCommand` against hard guardrails such as mint caps, band bounds, cooldowns, and defense-only buybacks.
-- [`/Users/nate/Desktop/agc/src/PolicyEngine.sol`](/Users/nate/Desktop/agc/src/PolicyEngine.sol) exists as a pure helper for deriving metrics, selecting regimes, updating anchors, and quoting mint/buyback budgets, but it is not yet wired as the sole authority inside `PolicyController`.
+- [`/Users/nate/Desktop/agc/src/AGCHook.sol`](/Users/nate/Desktop/agc/src/AGCHook.sol) accumulates the fast-path epoch snapshot on every swap and liquidity action, including time-weighted mid-price observations from pool `slot0`.
+- [`/Users/nate/Desktop/agc/src/PolicyEngine.sol`](/Users/nate/Desktop/agc/src/PolicyEngine.sol) is wired into [`/Users/nate/Desktop/agc/src/PolicyController.sol`](/Users/nate/Desktop/agc/src/PolicyController.sol) as the source of derived metrics, regime selection, anchor updates, and mint / buyback budgets.
+- the keeper now submits only bounded external metrics such as depth and productive growth; the keeper does not choose regime or budgets directly.
 
-That means the policy loop is deterministic enough to simulate and test, but the final regime selection and budget command is still supplied by a trusted keeper in v1.
+That makes the policy loop deterministic for a given snapshot plus external metrics, while still acknowledging that some inputs remain offchain in v1.
 
 ### 2. The productive-flow trust model is intentionally narrow
 
 The spec leaves room for richer productive-flow attestation. The MVP only trusts explicit router metadata:
 
-- [`/Users/nate/Desktop/agc/src/SettlementRouter.sol`](/Users/nate/Desktop/agc/src/SettlementRouter.sol) is the intended trusted path for productive payment settlement.
+- [`/Users/nate/Desktop/agc/src/SettlementRouter.sol`](/Users/nate/Desktop/agc/src/SettlementRouter.sol) exposes both a public settlement path and a facilitator-attested productive settlement path.
 - The hook only decodes structured metadata when the calling router is whitelisted.
+- Productive receipts are only minted for facilitator-signed settlement intents from trusted facilitators.
+- [`/Users/nate/Desktop/agc/service/facilitator`](/Users/nate/Desktop/agc/service/facilitator) is the reference attestation service for v1. It owns route hash, quality score, and expiry policy.
 - There is no permissionless productive-flow attestation in v1.
 
 ### 3. Reward streaming is implemented, but inline swap rewards are not
@@ -678,11 +682,11 @@ The network pays growth participants in newly created monetary capacity.
 1. agent holds `AGC`
 2. agent accesses a paid endpoint
 3. endpoint demands payment in x402-compatible stablecoin flow
-4. agent calls `SettlementRouter`
+4. agent calls the public `SettlementRouter` path for plain settlement, or the facilitator-attested path when reward eligibility is available
 5. router swaps `AGC -> USDC` through the canonical v4 pool
 6. router completes the payment path
-7. hook marks volume as productive
-8. reward receipt is created
+7. only facilitator-attested productive payments are tagged as productive in the hook
+8. productive routes mint a reward receipt
 9. reward settles later through the distributor
 
 ### 13.2 Working-capital acquisition flow

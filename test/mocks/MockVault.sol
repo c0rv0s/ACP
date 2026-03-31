@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AGCToken} from "../../src/AGCToken.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { AGCToken } from "../../src/AGCToken.sol";
 
 contract MockVault {
     using SafeERC20 for IERC20;
@@ -14,7 +14,10 @@ contract MockVault {
     uint256 public lastLockedAmount;
     uint64 public lastLockDuration;
 
-    constructor(IERC20 usdcToken, AGCToken agcToken) {
+    constructor(
+        IERC20 usdcToken,
+        AGCToken agcToken
+    ) {
         usdc = usdcToken;
         agc = agcToken;
     }
@@ -23,12 +26,18 @@ contract MockVault {
         return usdc.balanceOf(address(this));
     }
 
-    function lockTreasuryMint(uint256 amount, uint64 duration) external {
+    function lockTreasuryMint(
+        uint256 amount,
+        uint64 duration
+    ) external {
         lastLockedAmount = amount;
         lastLockDuration = duration;
     }
 
-    function spendUSDC(address to, uint256 amount) external {
+    function spendUSDC(
+        address to,
+        uint256 amount
+    ) external {
         usdc.safeTransfer(to, amount);
     }
 
@@ -36,7 +45,9 @@ contract MockVault {
         return 0;
     }
 
-    function burnProtocolAGC(uint256 amount) external {
+    function burnProtocolAGC(
+        uint256 amount
+    ) external {
         agc.burn(address(this), amount);
     }
 }

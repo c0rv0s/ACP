@@ -2,11 +2,11 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
-import {AGCToken} from "../../src/AGCToken.sol";
-import {RewardDistributor} from "../../src/RewardDistributor.sol";
-import {IAGCHook} from "../../src/interfaces/IAGCHook.sol";
-import {AGCDataTypes} from "../../src/libraries/AGCDataTypes.sol";
-import {MockHookAdapter} from "../mocks/MockHookAdapter.sol";
+import { AGCToken } from "../../src/AGCToken.sol";
+import { RewardDistributor } from "../../src/RewardDistributor.sol";
+import { IAGCHook } from "../../src/interfaces/IAGCHook.sol";
+import { AGCDataTypes } from "../../src/libraries/AGCDataTypes.sol";
+import { MockHookAdapter } from "../mocks/MockHookAdapter.sol";
 
 contract RewardDistributorTest is Test {
     bytes32 internal constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -31,22 +31,7 @@ contract RewardDistributorTest is Test {
 
     function testClaimReceiptCreatesStreamAndPaysOutOverTime() public {
         uint256 start = block.timestamp;
-
-        hook.setRewardReceipt(
-            1,
-            AGCDataTypes.RewardReceipt({
-                beneficiary: alice,
-                originalSender: alice,
-                intentHash: keccak256("receipt-1"),
-                flowClass: AGCDataTypes.FlowClass.ProductivePayment,
-                epochId: 1,
-                createdAt: uint64(block.timestamp),
-                qualityScoreBps: uint16(AGCDataTypes.BPS),
-                agcAmount: 100e18,
-                usdcAmount: 10e6,
-                consumed: false
-            })
-        );
+        hook.setRewardReceipt(1, _receipt(alice, keccak256("receipt-1"), false));
 
         vm.prank(alice);
         uint256 streamId = distributor.claimProductiveReceipt(1);
@@ -62,19 +47,72 @@ contract RewardDistributorTest is Test {
         assertGt(agc.balanceOf(alice), 1e18);
     }
 
-    function testControllerCanScheduleLpStream() public {
+    function testClaimReceiptRevertsWhenAlreadyConsumed() public {
+        hook.setRewardReceipt(1, _receipt(alice, keccak256("receipt-1"), false));
+
+        vm.prank(alice);
+        distributor.claimProductiveReceipt(1);
+
+        vm.prank(alice);
+        vm.expectRevert(MockHookAdapter.RewardReceiptConsumed.selector);
+        distributor.claimProductiveReceipt(1);
+    }
+
+    function testReceiptClaimPauseBlocksNewReceiptClaimsButNotStreamClaims() public {
+        hook.setRewardReceipt(1, _receipt(alice, keccak256("receipt-1"), false));
+
+        distributor.setReceiptClaimsPaused(true);
+
+        vm.prank(alice);
+        vm.expectRevert(RewardDistributor.ReceiptClaimsPaused.selector);
+        distributor.claimProductiveReceipt(1);
+
         uint256 streamId = distributor.scheduleBudgetStream(
-            1,
-            AGCDataTypes.RewardCategory.LP,
-            bob,
-            100e18,
-            7 days,
-            keccak256("lp-1")
+            1, AGCDataTypes.RewardCategory.LP, bob, 100e18, 7 days, keccak256("lp-1")
         );
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(bob);
         distributor.claimStream(streamId);
         assertEq(agc.balanceOf(bob), 100e18);
+    }
+
+    function testControllerCanScheduleLpStream() public {
+        uint256 streamId = distributor.scheduleBudgetStream(
+            1, AGCDataTypes.RewardCategory.LP, bob, 100e18, 7 days, keccak256("lp-1")
+        );
+
+        vm.warp(block.timestamp + 7 days);
+        vm.prank(bob);
+        distributor.claimStream(streamId);
+        assertEq(agc.balanceOf(bob), 100e18);
+    }
+
+    function testStreamSchedulingPauseBlocksNewStreams() public {
+        distributor.setStreamSchedulingPaused(true);
+
+        vm.expectRevert(RewardDistributor.StreamSchedulingPaused.selector);
+        distributor.scheduleBudgetStream(
+            1, AGCDataTypes.RewardCategory.LP, bob, 100e18, 7 days, keccak256("lp-1")
+        );
+    }
+
+    function _receipt(
+        address beneficiary,
+        bytes32 intentHash,
+        bool consumed
+    ) internal view returns (AGCDataTypes.RewardReceipt memory) {
+        return AGCDataTypes.RewardReceipt({
+            beneficiary: beneficiary,
+            originalSender: beneficiary,
+            intentHash: intentHash,
+            flowClass: AGCDataTypes.FlowClass.ProductivePayment,
+            epochId: 1,
+            createdAt: uint64(block.timestamp),
+            qualityScoreBps: uint16(AGCDataTypes.BPS),
+            agcAmount: 100e18,
+            usdcAmount: 10e6,
+            consumed: consumed
+        });
     }
 }

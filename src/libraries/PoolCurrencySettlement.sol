@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Currency} from "v4-core/types/Currency.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import { Currency } from "v4-core/types/Currency.sol";
+import { IERC20Minimal } from "v4-core/interfaces/external/IERC20Minimal.sol";
+import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
 
 library PoolCurrencySettlement {
-    function settle(Currency currency, IPoolManager manager, address payer, uint256 amount) internal {
+    function settle(
+        Currency currency,
+        IPoolManager manager,
+        address payer,
+        uint256 amount
+    ) internal {
         if (amount == 0) return;
 
         if (currency.isAddressZero()) {
-            manager.settle{value: amount}();
+            manager.settle{ value: amount }();
             return;
         }
 
@@ -23,7 +28,12 @@ library PoolCurrencySettlement {
         manager.settle();
     }
 
-    function take(Currency currency, IPoolManager manager, address recipient, uint256 amount) internal {
+    function take(
+        Currency currency,
+        IPoolManager manager,
+        address recipient,
+        uint256 amount
+    ) internal {
         if (amount == 0) return;
         manager.take(currency, recipient, amount);
     }

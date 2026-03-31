@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {AGCDataTypes} from "./libraries/AGCDataTypes.sol";
+import { AGCDataTypes } from "./libraries/AGCDataTypes.sol";
 
 contract PolicyEngine {
     function deriveMetrics(
@@ -35,7 +35,8 @@ contract PolicyEngine {
     ) public pure returns (AGCDataTypes.Regime nextRegime) {
         uint256 floorPrice = anchorPriceX18 * (AGCDataTypes.BPS - bandWidthBps) / AGCDataTypes.BPS;
 
-        bool inDefense = price < floorPrice || metrics.volatilityBps >= policyParams.criticalVolatilityBps
+        bool inDefense = price < floorPrice
+            || metrics.volatilityBps >= policyParams.criticalVolatilityBps
             || metrics.coverageBps < policyParams.criticalCoverageBps
             || metrics.exitPressureBps >= policyParams.criticalExitBps;
 
@@ -45,8 +46,7 @@ contract PolicyEngine {
             && metrics.coverageBps >= policyParams.minCoverageBps
             && metrics.volatilityBps <= policyParams.maxExpansionVolatilityBps
             && metrics.exitPressureBps <= policyParams.maxExpansionExitBps
-            && productiveGrowthBps > 0
-            && price >= anchorPriceX18;
+            && productiveGrowthBps > 0 && price >= anchorPriceX18;
 
         if (canExpand) return AGCDataTypes.Regime.Expansion;
         return AGCDataTypes.Regime.Neutral;
@@ -86,8 +86,9 @@ contract PolicyEngine {
         uint256 remainingDailyCapacity
     ) public pure returns (uint256 budget) {
         uint256 mintRateBps = policyParams.expansionKappaBps
-            * _healthBps(metrics.productiveUsageBps, metrics.coverageBps, productiveGrowthBps, policyParams)
-            / AGCDataTypes.BPS;
+            * _healthBps(
+                metrics.productiveUsageBps, metrics.coverageBps, productiveGrowthBps, policyParams
+            ) / AGCDataTypes.BPS;
         if (mintRateBps > policyParams.maxMintPerEpochBps) {
             mintRateBps = policyParams.maxMintPerEpochBps;
         }
@@ -127,7 +128,8 @@ contract PolicyEngine {
         AGCDataTypes.PolicyParams memory policyParams
     ) public pure returns (uint256 budget) {
         uint256 floorPrice = anchorPriceX18 * (AGCDataTypes.BPS - bandWidthBps) / AGCDataTypes.BPS;
-        uint256 priceStressBps = price < floorPrice ? (floorPrice - price) * AGCDataTypes.BPS / anchorPriceX18 : 0;
+        uint256 priceStressBps =
+            price < floorPrice ? (floorPrice - price) * AGCDataTypes.BPS / anchorPriceX18 : 0;
         uint256 coverageStressBps = metrics.coverageBps < policyParams.criticalCoverageBps
             ? policyParams.criticalCoverageBps - metrics.coverageBps
             : 0;
@@ -147,8 +149,8 @@ contract PolicyEngine {
         uint256 targetSpendRateBps = stressBps > policyParams.criticalVolatilityBps
             ? policyParams.severeDefenseSpendBps
             : policyParams.mildDefenseSpendBps;
-        uint256 stressSpend =
-            treasuryUsdc * policyParams.buybackKappaBps * stressBps / AGCDataTypes.BPS / AGCDataTypes.BPS;
+        uint256 stressSpend = treasuryUsdc * policyParams.buybackKappaBps * stressBps
+            / AGCDataTypes.BPS / AGCDataTypes.BPS;
         uint256 cap = treasuryUsdc * targetSpendRateBps / AGCDataTypes.BPS;
         budget = stressSpend > cap ? cap : stressSpend;
     }

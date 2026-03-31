@@ -2,7 +2,9 @@
 pragma solidity ^0.8.26;
 
 interface ISettlementRouter {
-    function executeTreasuryBuyback(uint256 usdcAmountIn, uint256 minAgcOut, bytes32 refId)
-        external
-        returns (uint256 agcBurned);
+    function executeTreasuryBuyback(
+        uint256 usdcAmountIn,
+        uint256 minAgcOut,
+        bytes32 refId
+    ) external returns (uint256 agcBurned);
 }

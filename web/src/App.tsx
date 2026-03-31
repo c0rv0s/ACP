@@ -1,22 +1,30 @@
 import {
   Fragment,
   useEffect,
-  useMemo,
   useState,
   type CSSProperties,
 } from "react";
-import { formatUnits, keccak256, parseUnits, stringToHex } from "viem";
+import {
+  decodeEventLog,
+  formatUnits,
+  keccak256,
+  parseUnits,
+  stringToHex,
+  type Hex,
+} from "viem";
 import {
   useAccount,
   useConnect,
   useDisconnect,
+  usePublicClient,
   useReadContract,
-  useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
 import {
   addresses,
   agcAbi,
+  facilitatorApiUrl,
+  hookAbi,
   policyControllerAbi,
   rewardDistributorAbi,
   settlementRouterAbi,
@@ -515,7 +523,7 @@ const flowSteps = [
   {
     title: "3. Route through SettlementRouter",
     text:
-      "The trusted router packages metadata for the hook, recovers the original user identity, and swaps through the canonical AGC/USDC pool.",
+      "The router now has two lanes: a public settlement lane that just pays in USDC, and a productive lane that requires a trusted facilitator signature before the hook will treat the flow as reward-eligible.",
   },
   {
     title: "4. Settle in USDC",
@@ -525,12 +533,12 @@ const flowSteps = [
   {
     title: "5. Record productive flow",
     text:
-      "The hook records productive volume, updates epoch counters, and mints a receipt instead of spraying rewards inline into the swap path.",
+      "Only facilitator-signed productive payments mint a receipt. Plain public settlement still works, but it does not get productive-flow rewards by default.",
   },
   {
     title: "6. Stream rewards later",
     text:
-      "The distributor converts receipts into time-vested AGC streams next epoch so incentives land gradually rather than detonating the market immediately.",
+      "The distributor converts valid receipts into time-vested AGC streams next epoch so incentives land gradually rather than detonating the market immediately.",
   },
 ] as const;
 
@@ -662,19 +670,101 @@ function AsciiInterlude({
   );
 }
 
+type FacilitatorPartner = {
+  key: string;
+  name: string;
+  description: string;
+  qualityScoreBps: number;
+  ttlSeconds: number;
+  routeHash: Hex;
+};
+
+type FacilitatorResponse = {
+  facilitator: `0x${string}`;
+  attestation: {
+    payer: `0x${string}`;
+    recipient: `0x${string}`;
+    agcAmountIn: string;
+    paymentId: Hex;
+    qualityScoreBps: number;
+    deadline: number;
+    routeHash: Hex;
+  };
+  signature: Hex;
+};
+
+function extractErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Transaction failed.";
+}
+
+function decodeReceiptCreated(
+  logs: readonly {
+    address: `0x${string}`;
+    data: Hex;
+    topics: readonly Hex[];
+  }[],
+) {
+  for (const log of logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: hookAbi,
+        data: log.data,
+        topics: [...log.topics],
+      });
+      if (decoded.eventName === "RewardReceiptCreated") {
+        return decoded.args.receiptId?.toString() ?? null;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function decodeReceiptClaimed(
+  logs: readonly {
+    address: `0x${string}`;
+    data: Hex;
+    topics: readonly Hex[];
+  }[],
+) {
+  for (const log of logs) {
+    try {
+      const decoded = decodeEventLog({
+        abi: rewardDistributorAbi,
+        data: log.data,
+        topics: [...log.topics],
+      });
+      if (decoded.eventName === "ReceiptClaimed") {
+        return decoded.args.streamId?.toString() ?? null;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 export default function App() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { writeContractAsync, data: hash } = useWriteContract();
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash });
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
   const [streamId, setStreamId] = useState("1");
+  const [receiptId, setReceiptId] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("10");
   const [minUsdcOut, setMinUsdcOut] = useState("9.9");
   const [recipient, setRecipient] = useState(
     "0x000000000000000000000000000000000000dEaD",
   );
+  const [partnerKey, setPartnerKey] = useState("demo-x402");
+  const [partners, setPartners] = useState<FacilitatorPartner[]>([]);
+  const [txStatus, setTxStatus] = useState("Idle");
+  const [txNote, setTxNote] = useState<string | null>(null);
 
   const ready =
     addresses.agc &&
@@ -752,55 +842,224 @@ export default function App() {
   const regimeLabel =
     regimeIdx !== undefined ? regimeLabels[regimeIdx] ?? "Unknown" : " - ";
 
-  const status = useMemo(() => {
-    if (isConfirming) return "confirming" as const;
-    if (hash) return "submitted" as const;
-    return "idle" as const;
-  }, [hash, isConfirming]);
-
-  const statusLabel = {
-    idle: "Idle",
-    confirming: "Confirming...",
-    submitted: "Submitted",
-  }[status];
-
   const shortAddr = address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
     : null;
+  const displayedPartners =
+    partners.length > 0
+      ? partners
+      : [
+          {
+            key: partnerKey,
+            name: partnerKey,
+            description: "",
+            qualityScoreBps: 0,
+            ttlSeconds: 0,
+            routeHash:
+              "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex,
+          },
+        ];
 
-  async function approveAndPay() {
-    if (!ready || !address || !addresses.agc || !addresses.settlementRouter) {
-      return;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPartners() {
+      try {
+        const response = await fetch(`${facilitatorApiUrl}/config/public`);
+        if (!response.ok) {
+          throw new Error(`Failed to load facilitator config (${response.status})`);
+        }
+
+        const payload = (await response.json()) as {
+          partners?: FacilitatorPartner[];
+        };
+
+        if (cancelled || !payload.partners?.length) return;
+        setPartners(payload.partners);
+        setPartnerKey((current) => current || payload.partners?.[0]?.key || "demo-x402");
+      } catch {
+        if (!cancelled) {
+          setPartners([]);
+        }
+      }
     }
 
-    const amount = parseUnits(paymentAmount, 18);
-    const minOut = parseUnits(minUsdcOut, 6);
-    const paymentId = keccak256(stringToHex(`${address}:${Date.now()}`));
+    void loadPartners();
 
-    await writeContractAsync({
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function waitForHash(hash: Hex) {
+    if (!publicClient) {
+      throw new Error("Wallet client is connected, but no public client is configured.");
+    }
+    return publicClient.waitForTransactionReceipt({ hash });
+  }
+
+  async function approveAgc(amount: bigint) {
+    if (!addresses.agc || !addresses.settlementRouter) return;
+
+    setTxStatus("Approving AGC");
+    const hash = await writeContractAsync({
       address: addresses.agc,
       abi: agcAbi,
       functionName: "approve",
       args: [addresses.settlementRouter, amount],
     });
-
-    await writeContractAsync({
-      address: addresses.settlementRouter,
-      abi: settlementRouterAbi,
-      functionName: "settlePayment",
-      args: [amount, minOut, recipient as `0x${string}`, paymentId, 10_000],
-    });
+    await waitForHash(hash);
   }
 
-  async function handleClaim() {
+  async function handlePublicSettlement() {
+    if (!ready || !address || !addresses.agc || !addresses.settlementRouter) {
+      return;
+    }
+
+    try {
+      setTxNote(null);
+      const amount = parseUnits(paymentAmount, 18);
+      const minOut = parseUnits(minUsdcOut, 6);
+      const paymentId = keccak256(stringToHex(`${address}:${Date.now()}:public`));
+
+      await approveAgc(amount);
+
+      setTxStatus("Submitting public settlement");
+      const hash = await writeContractAsync({
+        address: addresses.settlementRouter,
+        abi: settlementRouterAbi,
+        functionName: "settlePayment",
+        args: [amount, minOut, recipient as `0x${string}`, paymentId],
+      });
+      await waitForHash(hash);
+      setTxStatus("Public settlement complete");
+      setTxNote("Payment settled on the public lane. No productive receipt was created.");
+    } catch (error) {
+      setTxStatus("Idle");
+      setTxNote(extractErrorMessage(error));
+    }
+  }
+
+  async function handleProductiveSettlement() {
+    if (!ready || !address || !addresses.agc || !addresses.settlementRouter) {
+      return;
+    }
+
+    try {
+      setTxNote(null);
+      const amount = parseUnits(paymentAmount, 18);
+      const minOut = parseUnits(minUsdcOut, 6);
+      const paymentId = keccak256(stringToHex(`${address}:${Date.now()}:productive`));
+
+      setTxStatus("Requesting facilitator attestation");
+      const attestationResponse = await fetch(
+        `${facilitatorApiUrl}/attest/productive-payment`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            payer: address,
+            recipient,
+            agcAmountIn: amount.toString(),
+            paymentId,
+            partnerKey,
+          }),
+        },
+      );
+      if (!attestationResponse.ok) {
+        const payload = (await attestationResponse.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Facilitator attestation failed.");
+      }
+
+      const payload = (await attestationResponse.json()) as FacilitatorResponse;
+      await approveAgc(amount);
+
+      setTxStatus("Submitting productive settlement");
+      const hash = await writeContractAsync({
+        address: addresses.settlementRouter,
+        abi: settlementRouterAbi,
+        functionName: "settleProductivePayment",
+        args: [
+          {
+            payer: payload.attestation.payer,
+            recipient: payload.attestation.recipient,
+            agcAmountIn: BigInt(payload.attestation.agcAmountIn),
+            paymentId: payload.attestation.paymentId,
+            qualityScoreBps: payload.attestation.qualityScoreBps,
+            deadline: payload.attestation.deadline,
+            routeHash: payload.attestation.routeHash,
+          },
+          minOut,
+          payload.facilitator,
+          payload.signature,
+        ],
+      });
+      const receipt = await waitForHash(hash);
+      const nextReceiptId = decodeReceiptCreated(receipt.logs);
+
+      if (nextReceiptId) {
+        setReceiptId(nextReceiptId);
+        setTxNote(
+          `Productive settlement complete. Reward receipt ${nextReceiptId} is ready to claim into a stream.`,
+        );
+      } else {
+        setTxNote("Productive settlement complete, but no reward receipt log was decoded.");
+      }
+      setTxStatus("Productive settlement complete");
+    } catch (error) {
+      setTxStatus("Idle");
+      setTxNote(extractErrorMessage(error));
+    }
+  }
+
+  async function handleReceiptClaim() {
+    if (!addresses.rewardDistributor || !receiptId) return;
+
+    try {
+      setTxNote(null);
+      setTxStatus("Claiming reward receipt");
+      const hash = await writeContractAsync({
+        address: addresses.rewardDistributor,
+        abi: rewardDistributorAbi,
+        functionName: "claimProductiveReceipt",
+        args: [BigInt(receiptId)],
+      });
+      const receipt = await waitForHash(hash);
+      const nextStreamId = decodeReceiptClaimed(receipt.logs);
+      if (nextStreamId) {
+        setStreamId(nextStreamId);
+        setTxNote(`Receipt ${receiptId} claimed into stream ${nextStreamId}.`);
+      } else {
+        setTxNote(`Receipt ${receiptId} claimed.`);
+      }
+      setTxStatus("Receipt claimed");
+    } catch (error) {
+      setTxStatus("Idle");
+      setTxNote(extractErrorMessage(error));
+    }
+  }
+
+  async function handleStreamClaim() {
     if (!addresses.rewardDistributor) return;
 
-    await writeContractAsync({
-      address: addresses.rewardDistributor,
-      abi: rewardDistributorAbi,
-      functionName: "claimStream",
-      args: [BigInt(streamId)],
-    });
+    try {
+      setTxNote(null);
+      setTxStatus("Claiming vested AGC");
+      const hash = await writeContractAsync({
+        address: addresses.rewardDistributor,
+        abi: rewardDistributorAbi,
+        functionName: "claimStream",
+        args: [BigInt(streamId)],
+      });
+      await waitForHash(hash);
+      setTxStatus("Stream claim complete");
+      setTxNote(`Stream ${streamId} claimed.`);
+    } catch (error) {
+      setTxStatus("Idle");
+      setTxNote(extractErrorMessage(error));
+    }
   }
 
   return (
@@ -1002,8 +1261,46 @@ export default function App() {
         <div className="panels">
           <div className="panel">
             <div className="panel-header">
-              <h3 className="panel-title">Claim reward stream</h3>
-              <span className="panel-badge">vested emissions</span>
+              <h3 className="panel-title">Claim productive receipt</h3>
+              <div className="panel-header-side">
+                <span className="panel-badge">receipt to stream</span>
+                <div className="panel-info">
+                  <button
+                    className="panel-info-trigger"
+                    type="button"
+                    aria-label="How receipt claiming works"
+                  >
+                    i
+                  </button>
+                  <div className="panel-info-card" role="note">
+                    Facilitator-signed productive settlements emit reward receipts in the
+                    hook. Claim the receipt first, then claim the vested stream.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="field-label" htmlFor="receipt-id">
+                Receipt ID
+              </label>
+              <input
+                id="receipt-id"
+                className="field-input"
+                value={receiptId}
+                onChange={(event) => setReceiptId(event.target.value)}
+                placeholder="0"
+              />
+            </div>
+
+            <div className="panel-actions panel-actions-spacious">
+              <button
+                className="btn btn-primary"
+                disabled={!isConnected || !addresses.rewardDistributor || !receiptId}
+                onClick={handleReceiptClaim}
+              >
+                Claim receipt into stream
+              </button>
             </div>
 
             <div className="field">
@@ -1028,9 +1325,9 @@ export default function App() {
 
             <div className="panel-actions">
               <button
-                className="btn btn-primary"
+                className="btn btn-secondary"
                 disabled={!isConnected || !addresses.rewardDistributor}
-                onClick={handleClaim}
+                onClick={handleStreamClaim}
               >
                 Claim vested AGC
               </button>
@@ -1039,10 +1336,10 @@ export default function App() {
 
           <div className="panel">
             <div className="panel-header">
-              <h3 className="panel-title">Settle payment</h3>
-              <div className="tx-status" data-status={status}>
+              <h3 className="panel-title">Public settlement</h3>
+              <div className="tx-status" data-status={txStatus === "Idle" ? "idle" : "confirming"}>
                 <span className="tx-status-dot" />
-                {statusLabel}
+                {txStatus}
               </div>
             </div>
 
@@ -1085,17 +1382,63 @@ export default function App() {
               />
             </div>
 
+            <p className="panel-meta">
+              Permissionless AGC to USDC settlement. This path always works, but it does not
+              create a productive reward receipt.
+            </p>
+
             <div className="panel-actions">
               <button
                 className="btn btn-primary"
                 disabled={!isConnected || !ready}
-                onClick={approveAndPay}
+                onClick={handlePublicSettlement}
               >
-                Approve + settle
+                Approve + settle publicly
+              </button>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title">Productive settlement</h3>
+              <span className="panel-badge">facilitator-attested</span>
+            </div>
+
+            <div className="field">
+              <label className="field-label" htmlFor="partner-key">
+                Facilitator route
+              </label>
+              <select
+                id="partner-key"
+                className="field-input"
+                value={partnerKey}
+                onChange={(event) => setPartnerKey(event.target.value)}
+              >
+                {displayedPartners.map((partner) => (
+                  <option key={partner.key} value={partner.key}>
+                    {partner.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <p className="panel-meta">
+              The facilitator service signs the payment intent, chooses quality score and route
+              hash, and the router verifies the signature before the hook will mint a receipt.
+            </p>
+
+            <div className="panel-actions">
+              <button
+                className="btn btn-primary"
+                disabled={!isConnected || !ready}
+                onClick={handleProductiveSettlement}
+              >
+                Request attestation + settle
               </button>
             </div>
           </div>
         </div>
+        {txNote && <p className="panel-meta">{txNote}</p>}
       </section>
 
       <section className="alarm-banner">

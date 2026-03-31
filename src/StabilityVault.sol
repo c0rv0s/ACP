@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AGCToken} from "./AGCToken.sol";
-import {IStabilityVault} from "./interfaces/IStabilityVault.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { AGCToken } from "./AGCToken.sol";
+import { IStabilityVault } from "./interfaces/IStabilityVault.sol";
 
 contract StabilityVault is Ownable2Step, IStabilityVault {
     using SafeERC20 for IERC20;
@@ -31,7 +31,11 @@ contract StabilityVault is Ownable2Step, IStabilityVault {
     uint256 public lockedTreasuryAgc;
     uint64 public treasuryUnlockAt;
 
-    constructor(address admin, AGCToken agcToken, IERC20 usdcToken) Ownable(admin) {
+    constructor(
+        address admin,
+        AGCToken agcToken,
+        IERC20 usdcToken
+    ) Ownable(admin) {
         agc = agcToken;
         usdc = usdcToken;
     }
@@ -42,21 +46,30 @@ contract StabilityVault is Ownable2Step, IStabilityVault {
     }
 
     modifier onlyAuthorizedSpender() {
-        if (msg.sender != policyController && msg.sender != settlementRouter) revert Unauthorized();
+        if (msg.sender != policyController && msg.sender != settlementRouter) {
+            revert Unauthorized();
+        }
         _;
     }
 
-    function setPolicyController(address controller) external onlyOwner {
+    function setPolicyController(
+        address controller
+    ) external onlyOwner {
         policyController = controller;
         emit PolicyControllerUpdated(controller);
     }
 
-    function setSettlementRouter(address router) external onlyOwner {
+    function setSettlementRouter(
+        address router
+    ) external onlyOwner {
         settlementRouter = router;
         emit SettlementRouterUpdated(router);
     }
 
-    function lockTreasuryMint(uint256 amount, uint64 duration) external onlyPolicyController {
+    function lockTreasuryMint(
+        uint256 amount,
+        uint64 duration
+    ) external onlyPolicyController {
         releaseExpiredTreasuryLock();
         lockedTreasuryAgc += amount;
 
@@ -77,13 +90,18 @@ contract StabilityVault is Ownable2Step, IStabilityVault {
         }
     }
 
-    function spendUSDC(address to, uint256 amount) external onlyAuthorizedSpender {
+    function spendUSDC(
+        address to,
+        uint256 amount
+    ) external onlyAuthorizedSpender {
         if (to == address(0)) revert InvalidRecipient();
         usdc.safeTransfer(to, amount);
         emit USDCSent(to, amount);
     }
 
-    function burnProtocolAGC(uint256 amount) external onlyPolicyController {
+    function burnProtocolAGC(
+        uint256 amount
+    ) external onlyPolicyController {
         releaseExpiredTreasuryLock();
         if (amount > availableAGC()) revert InsufficientUnlockedAGC();
         agc.burn(address(this), amount);
