@@ -1144,6 +1144,18 @@ export default function App() {
         </div>
 
         <div className="hero-art">
+          <video
+            className="hero-art-video"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          >
+            <source src="/ascii_green_smoke_psych_720_web.mp4" type="video/mp4" />
+          </video>
+          <div className="hero-art-overlay" aria-hidden="true" />
           <div className="sticker-band sticker-band-top" aria-hidden="true">
             {heroStickersTop.map((sticker, index) => (
               <div
