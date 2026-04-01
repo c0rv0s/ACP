@@ -1242,7 +1242,7 @@ code {
   object-fit: cover;
   object-position: center;
   opacity: 0.62;
-  filter: saturate(4) contrast(1.1) brightness(5);
+  filter: saturate(5) contrast(1.1) brightness(6);
 }
 
 .ascii-interlude-video-overlay {
