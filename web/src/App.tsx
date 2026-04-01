@@ -931,10 +931,12 @@ function AsciiInterlude({
   label,
   caption,
   frames,
+  backgroundVideoSrc,
 }: {
   label: string;
   caption: string;
   frames: readonly string[];
+  backgroundVideoSrc?: string;
 }) {
   const [frameIndex, setFrameIndex] = useState(0);
 
@@ -948,11 +950,32 @@ function AsciiInterlude({
 
   return (
     <section className="ascii-interlude">
+      {backgroundVideoSrc ? (
+        <>
+          <video
+            className="ascii-interlude-video"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          >
+            <source src={backgroundVideoSrc} type="video/mp4" />
+          </video>
+          <div className="ascii-interlude-video-overlay" aria-hidden="true" />
+        </>
+      ) : null}
       <div className="ascii-interlude-top">
         <p className="ascii-interlude-label">{label}</p>
         <span className="ascii-interlude-pulse" />
       </div>
-      <pre className="ascii-interlude-frame" aria-hidden="true">
+      <pre
+        className={`ascii-interlude-frame${
+          backgroundVideoSrc ? " ascii-interlude-frame-video" : ""
+        }`}
+        aria-hidden="true"
+      >
         {frames[frameIndex]}
       </pre>
       <p className="ascii-interlude-caption">{caption}</p>
@@ -1944,6 +1967,7 @@ AGC thesis:
           label={finalAsciiInterlude.label}
           caption={finalAsciiInterlude.caption}
           frames={finalAsciiInterlude.frames}
+          backgroundVideoSrc="/ascii_video_sunset_colors_2x_720p.mp4"
         />
       )}
 

@@ -1213,11 +1213,11 @@ code {
   background:
     linear-gradient(
       140deg,
-      rgba(255, 232, 0, 0.07),
-      rgba(44, 246, 255, 0.06) 35%,
-      rgba(255, 68, 98, 0.07)
+      rgba(255, 232, 0, 0.04),
+      rgba(44, 246, 255, 0.035) 35%,
+      rgba(255, 68, 98, 0.04)
     ),
-    rgba(10, 12, 18, 0.82);
+    rgba(10, 12, 18, 0.42);
 }
 
 .ascii-interlude::before {
@@ -1229,7 +1229,29 @@ code {
   pointer-events: none;
 }
 
+.ascii-interlude-video,
+.ascii-interlude-video-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ascii-interlude-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.62;
+  filter: saturate(4) contrast(1.1) brightness(5);
+}
+
+.ascii-interlude-video-overlay {
+  z-index: 0;
+}
+
 .ascii-interlude-top {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1259,6 +1281,7 @@ code {
 
 .ascii-interlude-frame {
   position: relative;
+  z-index: 1;
   margin: 0;
   height: 400px;
   padding: 24px 28px;
@@ -1282,7 +1305,26 @@ code {
     ascii-shimmer 6.8s linear infinite;
 }
 
+.ascii-interlude-frame-video {
+  margin-top: 165px;
+  margin-bottom: 165px;
+  border: 2px dashed rgba(255, 255, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(6, 8, 14, 0.5);
+  backdrop-filter: blur(10px) saturate(115%);
+  color: rgba(255, 248, 231, 0.96);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.7),
+    0 0 18px rgba(44, 246, 255, 0.12);
+}
+
 .ascii-interlude-caption {
+  position: relative;
+  z-index: 1;
   margin-top: 12px;
   max-width: 70ch;
   padding-right: 18px;
