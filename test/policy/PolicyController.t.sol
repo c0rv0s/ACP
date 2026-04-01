@@ -113,7 +113,7 @@ contract PolicyControllerTest is Test {
         assertEq(agc.balanceOf(address(vault)), 6e17);
     }
 
-    function testDefenseEpochTriggersDeterministicBuyback() public {
+    function testDefenseEpochQueuesBuybackAndExecutesInChunks() public {
         hook.setNextSnapshot(
             AGCDataTypes.EpochSnapshot({
                 epochId: 1,
@@ -142,13 +142,28 @@ contract PolicyControllerTest is Test {
             buybackMinAgcOut: 50e18
         });
 
+        router.setNextBurnAmount(10e18);
+
         AGCDataTypes.EpochResult memory settled = controller.settleEpoch(metrics);
 
         assertEq(uint8(settled.regime), uint8(AGCDataTypes.Regime.Defense));
         assertEq(settled.bandWidthBps, 400);
         assertGt(settled.buybackBudget, 0);
-        assertEq(router.lastBuybackBudget(), settled.buybackBudget);
-        assertEq(router.lastMinAgcOut(), 50e18);
+        assertEq(controller.pendingTreasuryBuybackUsdc(), settled.buybackBudget);
+        assertEq(router.lastBuybackBudget(), 0);
+
+        uint256 chunk = settled.buybackBudget / 3;
+        uint256 burned1 = controller.executePendingTreasuryBuyback(chunk, 1e18, 0);
+        assertEq(burned1, 10e18);
+        assertEq(router.lastBuybackBudget(), chunk);
+        assertEq(router.lastMinAgcOut(), 1e18);
+        assertEq(router.lastSqrtPriceLimitX96(), 0);
+        assertEq(controller.pendingTreasuryBuybackUsdc(), settled.buybackBudget - chunk);
+
+        uint256 remaining = controller.pendingTreasuryBuybackUsdc();
+        controller.executePendingTreasuryBuyback(remaining, 1e18, 0);
+        assertEq(controller.pendingTreasuryBuybackUsdc(), 0);
+        assertEq(router.lastBuybackBudget(), remaining);
     }
 
     function testCooldownForcesRecoveryAndZeroMint() public {

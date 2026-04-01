@@ -142,7 +142,7 @@ AGC tries to fill the gap without pretending to be cash.
     kicker: "How it works",
     title: "The Uniswap v4 hook is the fast path; the policy controller is the slow path.",
     body:
-      "On the fast path, the hook classifies flows, adjusts LP fees, charges hook fees, records productive receipts, updates epoch counters, and penalizes short-lived liquidity. On the slow path, the controller settles epochs, enforces mint and buyback caps, sets regime state, routes reward budgets, and triggers treasury actions through the canonical settlement router.",
+      "On the fast path, the hook classifies flows, adjusts LP fees, charges hook fees, records productive receipts, updates epoch counters, and penalizes short-lived liquidity. On the slow path, the controller settles epochs, enforces mint and buyback caps, sets regime state, routes reward budgets, queues defense buyback budgets, and executes treasury swaps through the canonical settlement router in separate, price-bounded steps.",
     detail:
       "The launch architecture keeps that split intentionally conservative. The hook accumulates the market data. The controller validates bounded policy actions against hard guardrails. The monetary loop stays disciplined on purpose so the network can expand only when productive demand is actually showing up in the flow.",
     bullets: [
@@ -152,7 +152,7 @@ AGC tries to fill the gap without pretending to be cash.
     ],
     ascii: String.raw`
 swap -> classify -> fee -> observe -> receipt
-epoch -> settle -> mint/buyback -> stream rewards
+epoch -> settle -> mint | queue buyback -> execute (chunked) -> stream rewards
 `,
   },
   {
@@ -176,12 +176,12 @@ SWAP TO USDC  -> only when the invoice hits
     kicker: "Risk controls",
     title: "When stress rises, the system is supposed to get mean, not pretend everything is fine.",
     body:
-      "Defense mode is the anti-bank-run posture. Issuance stops. Exit fees rise. Treasury USDC can be spent on buybacks. The band can widen. Mercenary flow becomes more expensive. The point is not to freeze users; it is to preserve utility long enough that the currency can survive reflexive sell pressure.",
+      "Defense mode is the anti-bank-run posture. Issuance stops. Exit fees rise. Treasury USDC is earmarked for buybacks (queued on epoch settlement, executed in separate swaps). The band can widen. Mercenary flow becomes more expensive. The point is not to freeze users; it is to preserve utility long enough that the currency can survive reflexive sell pressure.",
     detail:
       "This is why the protocol narrative has to stay honest. There is no redemption guarantee hiding under the hood. The safety story is dynamic policy, disciplined caps, durable liquidity incentives, and a treasury that can spend into disorder.",
     bullets: [
       "No new growth mint while weak",
-      "Defense-only buybacks through the router",
+      "Defense buybacks: queued on settle, executed via router in chunks with sqrt price limits",
       "Anti-JIT liquidity fees and trusted-router gating",
     ],
     ascii: String.raw`
@@ -499,7 +499,7 @@ const regimeNarrative = [
     name: "Defense",
     signal: "stress tolls",
     text:
-      "Price is weak or stress metrics are flashing red. Mint shuts off, exits get more expensive, and treasury USDC is available for buybacks. The protocol spends stored strength to defend utility.",
+      "Price is weak or stress metrics are flashing red. Mint shuts off, exits get more expensive, and treasury USDC can be drawn down through queued buybacks executed over time with on-chain slippage and price-limit guardrails. The protocol spends stored strength to defend utility.",
   },
   {
     name: "Recovery",

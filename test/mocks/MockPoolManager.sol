@@ -6,7 +6,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { PoolKey } from "v4-core/types/PoolKey.sol";
 import { Currency } from "v4-core/types/Currency.sol";
 import { BalanceDelta } from "v4-core/types/BalanceDelta.sol";
-import { PoolIdLibrary } from "v4-core/types/PoolId.sol";
+import { PoolId, PoolIdLibrary } from "v4-core/types/PoolId.sol";
 import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
 import { IUnlockCallback } from "v4-core/interfaces/callback/IUnlockCallback.sol";
 
@@ -34,7 +34,7 @@ contract MockPoolManager {
         uint24 protocolFee,
         uint24 lpFee
     ) external {
-        bytes32 stateSlot = keccak256(abi.encode(key.toId(), POOLS_SLOT));
+        bytes32 stateSlot = keccak256(abi.encodePacked(PoolId.unwrap(key.toId()), POOLS_SLOT));
         uint256 packed = uint256(sqrtPriceX96);
         packed |= uint256(uint24(uint32(int32(tick)))) << 160;
         packed |= uint256(protocolFee) << 184;

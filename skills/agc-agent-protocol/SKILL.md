@@ -79,7 +79,16 @@ When asked about safety, include the current caveats:
 - the protocol is still being completed toward the broader spec
 - public settlement is simpler and lower-trust than reward-eligible productive settlement
 
-### 6. Explain the operator flow when relevant
+### 6. Explain defense buybacks (policy operators)
+
+When the user asks how treasury buybacks work in the deployed contracts:
+
+- `settleEpoch(ExternalMetrics)` consumes the hook epoch snapshot, updates regime and anchor, may mint in Expansion, and **queues** USDC buyback budget in `pendingTreasuryBuybackUsdc` when in Defense (it does not swap in the same call).
+- `executePendingTreasuryBuyback(usdcSpend, minAgcOut, sqrtPriceLimitX96)` (keeper or owner) pulls up to `usdcSpend` from the pending total, calls `SettlementRouter.executeTreasuryBuyback`, which swaps vault `USDC -> AGC` and burns the output. Pass a non-zero `sqrtPriceLimitX96` aligned with TWAP/oracle policy; pass `0` for the router’s legacy wide bound only if that risk is accepted.
+- Budget sizing is still deterministic from `PolicyEngine` + caps; execution timing and chunking are operator choices for MEV and manipulation resistance.
+- `ExternalMetrics.buybackMinAgcOut` still appears on previews and `EpochResult` for tooling; **per-swap** min out and price limit are the `executePendingTreasuryBuyback` arguments.
+
+### 7. Explain the operator flow when relevant
 
 If the user is asking how to actually use the system end to end, include:
 - hold or acquire `AGC`

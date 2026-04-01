@@ -13,7 +13,7 @@ The repo now implements the conservative v1 launch surface:
 
 - `AGCToken` with role-gated mint and burn
 - canonical `AGC/USDC` Uniswap v4 hook with dynamic LP fee overrides, time-weighted epoch observations, productive-flow receipts, and LP anti-JIT penalties
-- engine-driven `PolicyController` with `previewEpoch` / `settleEpoch`, deterministic regime selection, hybrid external metrics, defense buybacks, and reward routing
+- engine-driven `PolicyController` with `previewEpoch` / `settleEpoch`, deterministic regime selection, hybrid external metrics, queued defense buybacks (`executePendingTreasuryBuyback`), and reward routing
 - `StabilityVault`, `RewardDistributor`, and `SettlementRouter`, including productive-settlement pause and reward-claim / scheduling pause controls
 - an in-repo facilitator attestation service that signs productive payment intents for trusted partner routes
 - local deployment that mines a valid v4 hook address, deploys a timelock, initializes the pool, seeds liquidity, configures the facilitator, and writes frontend env vars
@@ -67,11 +67,13 @@ This is why local deployment lives in [`/Users/nate/Desktop/agc/script/deployLoc
 
 ### 6. The buyback path is implemented through the router
 
-Defense buybacks are executed by the controller through the settlement router:
+Defense epochs **credit** a buyback budget on `settleEpoch`; they do not necessarily spend in the same transaction.
 
-- the vault releases USDC
-- the router swaps `USDC -> AGC`
-- bought `AGC` is burned
+- `settleEpoch` adds the epoch’s `buybackBudget` to `pendingTreasuryBuybackUsdc` when the regime is Defense and the budget is non-zero.
+- A keeper or owner later calls `executePendingTreasuryBuyback(usdcSpend, minAgcOut, sqrtPriceLimitX96)` one or more times. Each call spends up to `usdcSpend` (capped by the pending balance).
+- For each execution: the vault releases USDC, the settlement router swaps `USDC -> AGC` with the given slippage floor and Uniswap `sqrtPriceLimitX96` (pass `0` on the router for the legacy wide price bound), and bought `AGC` is burned.
+
+Chunking and explicit price limits reduce sandwich surface versus a single public exact-out-style settlement. Operators should still prefer private relay when submitting keeper transactions.
 
 That preserves one canonical swap path instead of maintaining a separate treasury execution module in v1.
 
@@ -494,7 +496,7 @@ Intended epoch cadence:
 - 1 hour for policy update
 - 24 hours for large supply recalibration
 
-In the MVP, a permissioned keeper or the owner triggers `settleEpoch`.
+In the MVP, a permissioned keeper or the owner triggers `settleEpoch`. When defense buybacks are due, the same role runs `executePendingTreasuryBuyback` (possibly multiple times) with conservative `minAgcOut` and a `sqrtPriceLimitX96` derived from oracle or TWAP policy.
 
 ### 8.1 Step 1: compute health metrics
 
@@ -540,7 +542,7 @@ Contraction budget:
 
 `BuybackBudget_t = min(TreasuryUSDC * k_b * S_t, BuybackCap_t)`
 
-In the MVP, the controller enforces caps and Defense-only buybacks while the keeper supplies the concrete budget numbers.
+In the MVP, the controller enforces caps and Defense-only **queued** buyback budgets while the keeper supplies hybrid external metrics for `settleEpoch` and the concrete swap guardrails (`minAgcOut`, `sqrtPriceLimitX96`, chunk size) for each `executePendingTreasuryBuyback` call. The `buybackMinAgcOut` field on `ExternalMetrics` / `EpochResult` remains available for preview and off-chain coordination; execution uses the arguments on `executePendingTreasuryBuyback`.
 
 ## 9. Issuance Design
 

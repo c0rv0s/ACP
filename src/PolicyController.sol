@@ -17,6 +17,8 @@ contract PolicyController is Ownable2Step {
     error EpochTooSoon();
     error InvalidEpoch();
     error InvalidRewardRequest();
+    error InvalidTreasuryBuybackParams();
+    error NoPendingTreasuryBuyback();
 
     event KeeperUpdated(address indexed keeper, bool allowed);
     event PolicyParametersUpdated(uint16 baseBandBps, uint16 stressedBandBps, uint64 epochDuration);
@@ -30,6 +32,10 @@ contract PolicyController is Ownable2Step {
         uint256 anchorPriceX18,
         uint256 mintBudget,
         uint256 buybackBudget
+    );
+    event TreasuryBuybackQueued(uint64 indexed epochId, uint256 amount);
+    event PendingTreasuryBuybackExecuted(
+        uint256 usdcSpent, uint256 agcBurned, uint256 pendingTreasuryBuybackUsdcAfter
     );
     event RewardBudgetStreamScheduled(
         uint64 indexed epochId,
@@ -82,6 +88,11 @@ contract PolicyController is Ownable2Step {
 
     uint256 public mintedInCurrentDay;
     bool public emissionsForceDisabled;
+
+    /// @notice USDC buyback budget (policy-computed) queued for execution via
+    /// `executePendingTreasuryBuyback` so spending can be split across time.
+    uint256 public pendingTreasuryBuybackUsdc;
+    uint256 internal buybackExecutionNonce;
 
     mapping(address keeper => bool allowed) public keepers;
     mapping(uint64 epochId => AGCDataTypes.EpochResult result) public epochResult;
@@ -161,7 +172,13 @@ contract PolicyController is Ownable2Step {
         if (snapshot.epochId <= lastSettledEpoch) revert InvalidEpoch();
 
         result = _deriveEpochResult(snapshot, externalMetrics);
+        _persistEpochSettlement(snapshot, result);
+    }
 
+    function _persistEpochSettlement(
+        AGCDataTypes.EpochSnapshot memory snapshot,
+        AGCDataTypes.EpochResult memory result
+    ) internal {
         anchorPriceX18 = result.anchorPriceX18;
         bandWidthBps = result.bandWidthBps;
         regime = result.regime;
@@ -177,12 +194,9 @@ contract PolicyController is Ownable2Step {
             _distributeExpansionMint(snapshot.epochId, result.mintBudget);
         }
 
-        if (result.buybackBudget > 0 && externalMetrics.buybackMinAgcOut > 0) {
-            settlementRouter.executeTreasuryBuyback(
-                result.buybackBudget,
-                externalMetrics.buybackMinAgcOut,
-                keccak256(abi.encodePacked("buyback", snapshot.epochId, block.timestamp))
-            );
+        if (result.buybackBudget > 0) {
+            pendingTreasuryBuybackUsdc += result.buybackBudget;
+            emit TreasuryBuybackQueued(snapshot.epochId, result.buybackBudget);
         }
 
         lastSettledEpoch = snapshot.epochId;
@@ -205,6 +219,45 @@ contract PolicyController is Ownable2Step {
 
     function lastEpochResult() external view returns (AGCDataTypes.EpochResult memory result) {
         return _lastEpochResult;
+    }
+
+    /// @notice Spend up to `usdcSpend` from the queued buyback budget (capped by pending balance).
+    /// @param sqrtPriceLimitX96 Uniswap v4 swap price limit (0 = protocol default wide bound on the router).
+    function executePendingTreasuryBuyback(
+        uint256 usdcSpend,
+        uint256 minAgcOut,
+        uint160 sqrtPriceLimitX96
+    ) external onlyKeeperOrOwner returns (uint256 agcBurned) {
+        if (usdcSpend == 0 || minAgcOut == 0) revert InvalidTreasuryBuybackParams();
+        uint256 spend =
+            usdcSpend > pendingTreasuryBuybackUsdc ? pendingTreasuryBuybackUsdc : usdcSpend;
+        if (spend == 0) revert NoPendingTreasuryBuyback();
+
+        pendingTreasuryBuybackUsdc -= spend;
+        unchecked {
+            buybackExecutionNonce++;
+        }
+        return _finalizePendingTreasuryBuyback(spend, minAgcOut, sqrtPriceLimitX96);
+    }
+
+    function _finalizePendingTreasuryBuyback(
+        uint256 spend,
+        uint256 minAgcOut,
+        uint160 sqrtPriceLimitX96
+    ) private returns (uint256 agcBurned) {
+        bytes32 refId = keccak256(
+            abi.encodePacked(
+                "buyback",
+                address(this),
+                block.chainid,
+                buybackExecutionNonce,
+                spend,
+                block.timestamp
+            )
+        );
+        agcBurned =
+            settlementRouter.executeTreasuryBuyback(spend, minAgcOut, sqrtPriceLimitX96, refId);
+        emit PendingTreasuryBuybackExecuted(spend, agcBurned, pendingTreasuryBuybackUsdc);
     }
 
     function scheduleLpRewardStreams(

@@ -121,7 +121,11 @@ contract AGCHookTest is Test {
         vm.warp(block.timestamp + 1 hours);
         AGCDataTypes.EpochSnapshot memory snapshot = hook.previewEpochSnapshot();
 
-        assertApproxEqAbs(snapshot.shortTwapPriceX18, 105e16, 1e12);
+        AGCDataTypes.EpochAccumulator memory acc = hook.currentAccumulator();
+        uint256 tail = acc.lastMidPriceX18 * (uint256(uint64(block.timestamp)) - acc.lastObservedAt);
+        uint256 cumForTwap = acc.cumulativeMidPriceTimeX18 + tail;
+        uint256 elapsedForTwap = uint256(uint64(block.timestamp)) - acc.startedAt;
+        assertApproxEqAbs(snapshot.shortTwapPriceX18, cumForTwap / elapsedForTwap, 1e12);
         assertEq(snapshot.realizedVolatilityBps, 1_000);
     }
 

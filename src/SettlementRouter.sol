@@ -76,6 +76,9 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
         uint256 minAmountOut;
         bytes32 refId;
         bytes hookData;
+        /// @dev For TreasuryBuyback: pass Uniswap sqrt price limit; 0 uses min/max in the
+        /// swap direction (legacy wide limit). Other flows must pass 0.
+        uint160 sqrtPriceLimitX96;
     }
 
     struct ProductivePaymentAttestation {
@@ -172,7 +175,8 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
                         amountIn: agcAmountIn,
                         minAmountOut: minUsdcOut,
                         refId: paymentId,
-                        hookData: bytes("")
+                        hookData: bytes(""),
+                        sqrtPriceLimitX96: 0
                     })
                 )
             ),
@@ -226,7 +230,8 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
                         amountIn: attestation.agcAmountIn,
                         minAmountOut: minUsdcOut,
                         refId: attestation.paymentId,
-                        hookData: abi.encode(metadata)
+                        hookData: abi.encode(metadata),
+                        sqrtPriceLimitX96: 0
                     })
                 )
             ),
@@ -273,7 +278,8 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
                         amountIn: usdcAmountIn,
                         minAmountOut: minAgcOut,
                         refId: refId,
-                        hookData: abi.encode(metadata)
+                        hookData: abi.encode(metadata),
+                        sqrtPriceLimitX96: 0
                     })
                 )
             ),
@@ -286,6 +292,7 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
     function executeTreasuryBuyback(
         uint256 usdcAmountIn,
         uint256 minAgcOut,
+        uint160 sqrtPriceLimitX96,
         bytes32 refId
     ) external onlyController returns (uint256 agcBurned) {
         vault.spendUSDC(address(this), usdcAmountIn);
@@ -310,7 +317,8 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
                         amountIn: usdcAmountIn,
                         minAmountOut: minAgcOut,
                         refId: refId,
-                        hookData: abi.encode(metadata)
+                        hookData: abi.encode(metadata),
+                        sqrtPriceLimitX96: sqrtPriceLimitX96
                     })
                 )
             ),
@@ -332,12 +340,16 @@ contract SettlementRouter is Ownable2Step, EIP712, IUnlockCallback, ISettlementR
         Currency inputCurrency = zeroForOne ? key.currency0 : key.currency1;
         Currency outputCurrency = zeroForOne ? key.currency1 : key.currency0;
 
+        uint160 sqrtPriceLimitX96 = data.sqrtPriceLimitX96;
+        if (sqrtPriceLimitX96 == 0) {
+            sqrtPriceLimitX96 =
+                zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
+        }
+
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: zeroForOne,
             amountSpecified: -int256(data.amountIn),
-            sqrtPriceLimitX96: zeroForOne
-                ? TickMath.MIN_SQRT_PRICE + 1
-                : TickMath.MAX_SQRT_PRICE - 1
+            sqrtPriceLimitX96: sqrtPriceLimitX96
         });
 
         BalanceDelta delta = manager.swap(key, params, data.hookData);

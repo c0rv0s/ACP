@@ -1137,7 +1137,7 @@ export const agcHookAbi = [
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -1169,7 +1169,7 @@ export const agcHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "sqrtPriceX96",
         "type": "uint160",
         "internalType": "uint160"
       },
@@ -1186,7 +1186,7 @@ export const agcHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -2011,7 +2011,12 @@ export const agcHookAbi = [
             "internalType": "uint64"
           },
           {
-            "name": "sampleCount",
+            "name": "lastObservedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "observationCount",
             "type": "uint64",
             "internalType": "uint64"
           },
@@ -2046,22 +2051,22 @@ export const agcHookAbi = [
             "internalType": "int256"
           },
           {
-            "name": "cumulativePriceX18",
+            "name": "lastMidPriceX18",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "cumulativeProductivePriceX18",
+            "name": "cumulativeMidPriceTimeX18",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "lastPriceX18",
+            "name": "cumulativeProductivePriceVolumeX18",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "cumulativeAbsPriceChangeX18",
+            "name": "cumulativeAbsMidPriceChangeBps",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -2277,6 +2282,91 @@ export const agcHookAbi = [
         "name": "addedAt",
         "type": "uint40",
         "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "previewEpochSnapshot",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "snapshot",
+        "type": "tuple",
+        "internalType": "struct AGCDataTypes.EpochSnapshot",
+        "components": [
+          {
+            "name": "epochId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "startedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "endedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "productiveVolume",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "totalVolume",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "netExitVolume",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "shortTwapPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveSettlementPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "realizedVolatilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveSettlementCount",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "productiveUsers",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "repeatUsers",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "totalHookFeesUsdc",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "totalHookFeesAgc",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -2894,6 +2984,16 @@ export const agcHookAbi = [
   },
   {
     "type": "error",
+    "name": "RewardReceiptConsumed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RewardReceiptNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Unauthorized",
     "inputs": []
   },
@@ -2942,6 +3042,11 @@ export const policyControllerAbi = [
             "name": "router",
             "type": "address",
             "internalType": "contract ISettlementRouter"
+          },
+          {
+            "name": "policyEngine",
+            "type": "address",
+            "internalType": "contract PolicyEngine"
           }
         ]
       },
@@ -3166,6 +3271,162 @@ export const policyControllerAbi = [
   },
   {
     "type": "function",
+    "name": "emissionsForceDisabled",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "epochResult",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "regime",
+        "type": "uint8",
+        "internalType": "enum AGCDataTypes.Regime"
+      },
+      {
+        "name": "anchorPriceX18",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "bandWidthBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "shortTwapPriceX18",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "productiveSettlementPriceX18",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "productiveUsageBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "coverageBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "exitPressureBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "volatilityBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "repeatUserBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "mintBudget",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "buybackBudget",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "floatSupply",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "depthTo1Pct",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "productiveGrowthBps",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "depthTo2Pct",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lpStabilityBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "idleShareBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "buybackMinAgcOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "executePendingTreasuryBuyback",
+    "inputs": [
+      {
+        "name": "usdcSpend",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minAgcOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "sqrtPriceLimitX96",
+        "type": "uint160",
+        "internalType": "uint160"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "agcBurned",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "hook",
     "inputs": [],
     "outputs": [
@@ -3205,6 +3466,121 @@ export const policyControllerAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "lastEpochResult",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct AGCDataTypes.EpochResult",
+        "components": [
+          {
+            "name": "epochId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "regime",
+            "type": "uint8",
+            "internalType": "enum AGCDataTypes.Regime"
+          },
+          {
+            "name": "anchorPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "bandWidthBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "shortTwapPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveSettlementPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveUsageBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverageBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "exitPressureBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "volatilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "repeatUserBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mintBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "floatSupply",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depthTo1Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveGrowthBps",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "depthTo2Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lpStabilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "idleShareBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackMinAgcOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -3328,6 +3704,32 @@ export const policyControllerAbi = [
   },
   {
     "type": "function",
+    "name": "pendingTreasuryBuybackUsdc",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "policyEngine",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract PolicyEngine"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "policyParams",
     "inputs": [],
     "outputs": [
@@ -3436,6 +3838,159 @@ export const policyControllerAbi = [
   },
   {
     "type": "function",
+    "name": "previewEpoch",
+    "inputs": [
+      {
+        "name": "externalMetrics",
+        "type": "tuple",
+        "internalType": "struct AGCDataTypes.ExternalMetrics",
+        "components": [
+          {
+            "name": "depthTo1Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depthTo2Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveGrowthBps",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "lpStabilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "idleShareBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackMinAgcOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct AGCDataTypes.EpochResult",
+        "components": [
+          {
+            "name": "epochId",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "regime",
+            "type": "uint8",
+            "internalType": "enum AGCDataTypes.Regime"
+          },
+          {
+            "name": "anchorPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "bandWidthBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "shortTwapPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveSettlementPriceX18",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveUsageBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "coverageBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "exitPressureBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "volatilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "repeatUserBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mintBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "floatSupply",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depthTo1Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveGrowthBps",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "depthTo2Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lpStabilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "idleShareBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackMinAgcOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "recoveryCooldownUntilEpoch",
     "inputs": [],
     "outputs": [
@@ -3499,6 +4054,111 @@ export const policyControllerAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "scheduleIntegratorRewardStreams",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "requests",
+        "type": "tuple[]",
+        "internalType": "struct PolicyController.RewardStreamRequest[]",
+        "components": [
+          {
+            "name": "beneficiary",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "duration",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "source",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "streamIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "scheduleLpRewardStreams",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "requests",
+        "type": "tuple[]",
+        "internalType": "struct PolicyController.RewardStreamRequest[]",
+        "components": [
+          {
+            "name": "beneficiary",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "duration",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "source",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "streamIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setEmissionsForceDisabled",
+    "inputs": [
+      {
+        "name": "disabled",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -3678,9 +4338,48 @@ export const policyControllerAbi = [
     "name": "settleEpoch",
     "inputs": [
       {
-        "name": "command",
+        "name": "externalMetrics",
         "type": "tuple",
-        "internalType": "struct PolicyController.EpochCommand",
+        "internalType": "struct AGCDataTypes.ExternalMetrics",
+        "components": [
+          {
+            "name": "depthTo1Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depthTo2Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveGrowthBps",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "lpStabilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "idleShareBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackMinAgcOut",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "type": "tuple",
+        "internalType": "struct AGCDataTypes.EpochResult",
         "components": [
           {
             "name": "epochId",
@@ -3703,12 +4402,12 @@ export const policyControllerAbi = [
             "internalType": "uint256"
           },
           {
-            "name": "mintBudget",
+            "name": "shortTwapPriceX18",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "buybackBudget",
+            "name": "productiveSettlementPriceX18",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -3733,6 +4432,51 @@ export const policyControllerAbi = [
             "internalType": "uint256"
           },
           {
+            "name": "repeatUserBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "mintBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "buybackBudget",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "floatSupply",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depthTo1Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "productiveGrowthBps",
+            "type": "int256",
+            "internalType": "int256"
+          },
+          {
+            "name": "depthTo2Pct",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lpStabilityBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "idleShareBps",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
             "name": "buybackMinAgcOut",
             "type": "uint256",
             "internalType": "uint256"
@@ -3740,7 +4484,6 @@ export const policyControllerAbi = [
         ]
       }
     ],
-    "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -3781,6 +4524,19 @@ export const policyControllerAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "EmissionsForceDisabledUpdated",
+    "inputs": [
+      {
+        "name": "disabled",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -3878,6 +4634,31 @@ export const policyControllerAbi = [
   },
   {
     "type": "event",
+    "name": "PendingTreasuryBuybackExecuted",
+    "inputs": [
+      {
+        "name": "usdcSpent",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "agcBurned",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "pendingTreasuryBuybackUsdcAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PolicyParametersUpdated",
     "inputs": [
       {
@@ -3897,6 +4678,55 @@ export const policyControllerAbi = [
         "type": "uint64",
         "indexed": false,
         "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardBudgetStreamScheduled",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "category",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum AGCDataTypes.RewardCategory"
+      },
+      {
+        "name": "beneficiary",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "duration",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
+        "name": "source",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "streamId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -3939,33 +4769,27 @@ export const policyControllerAbi = [
     "anonymous": false
   },
   {
-    "type": "error",
-    "name": "AnchorMoveTooLarge",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "BuybackBudgetTooLarge",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "BuybackRequiresDefense",
-    "inputs": []
+    "type": "event",
+    "name": "TreasuryBuybackQueued",
+    "inputs": [
+      {
+        "name": "epochId",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "error",
     "name": "EpochTooSoon",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ExpansionCooldownActive",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidBand",
     "inputs": []
   },
   {
@@ -3975,17 +4799,22 @@ export const policyControllerAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidRewardRequest",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidRewardSplit",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "MintBudgetTooLarge",
+    "name": "InvalidTreasuryBuybackParams",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "MintForbiddenWhileWeak",
+    "name": "NoPendingTreasuryBuyback",
     "inputs": []
   },
   {
@@ -5317,6 +6146,19 @@ export const rewardDistributorAbi = [
   },
   {
     "type": "function",
+    "name": "receiptClaimsPaused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
@@ -5443,6 +6285,19 @@ export const rewardDistributorAbi = [
   },
   {
     "type": "function",
+    "name": "setReceiptClaimsPaused",
+    "inputs": [
+      {
+        "name": "paused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setRewardParameters",
     "inputs": [
       {
@@ -5484,6 +6339,32 @@ export const rewardDistributorAbi = [
   },
   {
     "type": "function",
+    "name": "setStreamSchedulingPaused",
+    "inputs": [
+      {
+        "name": "paused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "streamSchedulingPaused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -5494,6 +6375,19 @@ export const rewardDistributorAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "ClaimPauseUpdated",
+    "inputs": [
+      {
+        "name": "receiptClaimsPaused",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -5733,6 +6627,19 @@ export const rewardDistributorAbi = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "StreamSchedulingPauseUpdated",
+    "inputs": [
+      {
+        "name": "streamSchedulingPaused",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "BudgetExceeded",
     "inputs": []
@@ -5776,6 +6683,11 @@ export const rewardDistributorAbi = [
   },
   {
     "type": "error",
+    "name": "ReceiptClaimsPaused",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -5788,6 +6700,11 @@ export const rewardDistributorAbi = [
   {
     "type": "error",
     "name": "StreamNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "StreamSchedulingPaused",
     "inputs": []
   },
   {
@@ -5908,6 +6825,49 @@ export const settlementRouterAbi = [
   },
   {
     "type": "function",
+    "name": "eip712Domain",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "fields",
+        "type": "bytes1",
+        "internalType": "bytes1"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "version",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "chainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "verifyingContract",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "extensions",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "executeTreasuryBuyback",
     "inputs": [
       {
@@ -5919,6 +6879,11 @@ export const settlementRouterAbi = [
         "name": "minAgcOut",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "sqrtPriceLimitX96",
+        "type": "uint160",
+        "internalType": "uint160"
       },
       {
         "name": "refId",
@@ -5934,6 +6899,62 @@ export const settlementRouterAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "hashProductivePaymentAttestation",
+    "inputs": [
+      {
+        "name": "attestation",
+        "type": "tuple",
+        "internalType": "struct SettlementRouter.ProductivePaymentAttestation",
+        "components": [
+          {
+            "name": "payer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "recipient",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "agcAmountIn",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "paymentId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "qualityScoreBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "deadline",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "routeHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -5989,6 +7010,19 @@ export const settlementRouterAbi = [
   },
   {
     "type": "function",
+    "name": "productiveSettlementPaused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "renounceOwnership",
     "inputs": [],
     "outputs": [],
@@ -6002,6 +7036,37 @@ export const settlementRouterAbi = [
         "name": "nextController",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setProductiveSettlementPaused",
+    "inputs": [
+      {
+        "name": "paused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setTrustedFacilitator",
+    "inputs": [
+      {
+        "name": "facilitator",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "trusted",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [],
@@ -6030,11 +7095,77 @@ export const settlementRouterAbi = [
         "name": "paymentId",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "usdcAmountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "settleProductivePayment",
+    "inputs": [
+      {
+        "name": "attestation",
+        "type": "tuple",
+        "internalType": "struct SettlementRouter.ProductivePaymentAttestation",
+        "components": [
+          {
+            "name": "payer",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "recipient",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "agcAmountIn",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "paymentId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "qualityScoreBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "deadline",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "routeHash",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          }
+        ]
       },
       {
-        "name": "qualityScoreBps",
-        "type": "uint16",
-        "internalType": "uint16"
+        "name": "minUsdcOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "facilitator",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "signature",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [
@@ -6058,6 +7189,25 @@ export const settlementRouterAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "trustedFacilitators",
+    "inputs": [
+      {
+        "name": "facilitator",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "trusted",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -6093,6 +7243,25 @@ export const settlementRouterAbi = [
   },
   {
     "type": "function",
+    "name": "usedProductiveIntents",
+    "inputs": [
+      {
+        "name": "paymentId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "used",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "vault",
     "inputs": [],
     "outputs": [
@@ -6115,6 +7284,12 @@ export const settlementRouterAbi = [
         "internalType": "address"
       }
     ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "EIP712DomainChanged",
+    "inputs": [],
     "anonymous": false
   },
   {
@@ -6194,6 +7369,62 @@ export const settlementRouterAbi = [
   },
   {
     "type": "event",
+    "name": "ProductivePaymentSettled",
+    "inputs": [
+      {
+        "name": "payer",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "facilitator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "paymentId",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "agcIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "usdcOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ProductiveSettlementPauseUpdated",
+    "inputs": [
+      {
+        "name": "paused",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TreasuryBuybackExecuted",
     "inputs": [
       {
@@ -6213,6 +7444,25 @@ export const settlementRouterAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TrustedFacilitatorUpdated",
+    "inputs": [
+      {
+        "name": "facilitator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "trusted",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -6250,6 +7500,21 @@ export const settlementRouterAbi = [
   },
   {
     "type": "error",
+    "name": "AttestationExpired",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidAttestation",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidFacilitator",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidFlowClass",
     "inputs": []
   },
@@ -6260,7 +7525,17 @@ export const settlementRouterAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidQualityScore",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidRecipient",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidShortString",
     "inputs": []
   },
   {
@@ -6287,6 +7562,16 @@ export const settlementRouterAbi = [
   },
   {
     "type": "error",
+    "name": "ProductiveIntentAlreadyUsed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ProductiveSettlementPaused",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "SafeERC20FailedOperation",
     "inputs": [
       {
@@ -6300,6 +7585,17 @@ export const settlementRouterAbi = [
     "type": "error",
     "name": "SlippageExceeded",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "StringTooLong",
+    "inputs": [
+      {
+        "name": "str",
+        "type": "string",
+        "internalType": "string"
+      }
+    ]
   },
   {
     "type": "error",

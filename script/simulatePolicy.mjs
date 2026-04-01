@@ -232,6 +232,8 @@ async function main() {
     console.log(`volatility: ${formatBps(metrics.volatilityBps)}`);
     console.log(`mint budget: ${formatToken(mint, 18)} AGC`);
     console.log(`buyback budget: ${formatToken(buyback, 6)} USDC`);
+    // On-chain: this amount is added to PolicyController.pendingTreasuryBuybackUsdc on
+    // settleEpoch; spending is via executePendingTreasuryBuyback (chunked, minAgcOut + sqrtPriceLimitX96).
   }
 }
 

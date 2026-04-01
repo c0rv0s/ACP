@@ -7,6 +7,7 @@ import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
 import { PoolKey } from "v4-core/types/PoolKey.sol";
 import { Currency } from "v4-core/types/Currency.sol";
 import { BalanceDelta, toBalanceDelta } from "v4-core/types/BalanceDelta.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { AGCToken } from "../../src/AGCToken.sol";
 import { SettlementRouter } from "../../src/SettlementRouter.sol";
 import { AGCDataTypes } from "../../src/libraries/AGCDataTypes.sol";
@@ -163,6 +164,10 @@ contract SettlementRouterTest is Test {
         assertEq(agc.balanceOf(user), 1_100e18);
     }
 
+    function _buybackSqrtPriceLimit() internal view returns (uint160) {
+        return agcIsCurrency0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
+    }
+
     function testTreasuryBuybackBurnsAgc() public {
         router.setController(address(this));
         BalanceDelta delta = agcIsCurrency0
@@ -171,7 +176,9 @@ contract SettlementRouterTest is Test {
         manager.setNextSwapDelta(delta);
 
         uint256 totalSupplyBefore = agc.totalSupply();
-        uint256 burned = router.executeTreasuryBuyback(50e6, 49e18, keccak256("buyback"));
+        uint256 burned = router.executeTreasuryBuyback(
+            50e6, 49e18, _buybackSqrtPriceLimit(), keccak256("buyback")
+        );
 
         assertEq(burned, 50e18);
         assertEq(agc.totalSupply(), totalSupplyBefore - 50e18);
@@ -185,7 +192,9 @@ contract SettlementRouterTest is Test {
             : toBalanceDelta(-int128(40e6), int128(50e18));
         manager.setNextSwapDelta(delta);
 
-        uint256 burned = router.executeTreasuryBuyback(50e6, 49e18, keccak256("partial-buyback"));
+        uint256 burned = router.executeTreasuryBuyback(
+            50e6, 49e18, _buybackSqrtPriceLimit(), keccak256("partial-buyback")
+        );
 
         assertEq(burned, 50e18);
         assertEq(usdc.balanceOf(address(vault)), 500_000e6 - 40e6);

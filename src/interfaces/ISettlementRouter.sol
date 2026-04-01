@@ -5,6 +5,7 @@ interface ISettlementRouter {
     function executeTreasuryBuyback(
         uint256 usdcAmountIn,
         uint256 minAgcOut,
+        uint160 sqrtPriceLimitX96,
         bytes32 refId
     ) external returns (uint256 agcBurned);
 }
