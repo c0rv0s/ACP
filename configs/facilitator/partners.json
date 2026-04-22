@@ -1,0 +1,12 @@
+{
+  "partners": [
+    {
+      "key": "demo-x402",
+      "name": "Demo x402 Relay",
+      "routeTag": "demo-x402",
+      "qualityScoreBps": 9500,
+      "ttlSeconds": 300,
+      "description": "Default demo facilitator route for reward-eligible productive payments."
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "scenarios": [
+    {
+      "name": "healthy-growth",
+      "snapshot": {
+        "epochId": 1,
+        "productiveVolume": "500000000000",
+        "totalVolume": "1000000000000",
+        "netExitVolume": "0",
+        "shortTwapPriceX18": "1020000000000000000",
+        "productiveSettlementPriceX18": "1010000000000000000",
+        "realizedVolatilityBps": "100",
+        "productiveUsers": 500,
+        "repeatUsers": 320
+      },
+      "externalMetrics": {
+        "depthTo1Pct": "200000000000000000000000",
+        "depthTo2Pct": "400000000000000000000000",
+        "productiveGrowthBps": 5000,
+        "lpStabilityBps": "8000",
+        "idleShareBps": "1500",
+        "buybackMinAgcOut": "0"
+      }
+    },
+    {
+      "name": "thin-liquidity",
+      "snapshot": {
+        "epochId": 2,
+        "productiveVolume": "250000000000",
+        "totalVolume": "700000000000",
+        "netExitVolume": "70000000000",
+        "shortTwapPriceX18": "990000000000000000",
+        "productiveSettlementPriceX18": "995000000000000000",
+        "realizedVolatilityBps": "180",
+        "productiveUsers": 280,
+        "repeatUsers": 120
+      },
+      "externalMetrics": {
+        "depthTo1Pct": "40000000000000000000000",
+        "depthTo2Pct": "90000000000000000000000",
+        "productiveGrowthBps": 800,
+        "lpStabilityBps": "4200",
+        "idleShareBps": "2600",
+        "buybackMinAgcOut": "25000000000000000000000"
+      }
+    },
+    {
+      "name": "exit-wave",
+      "snapshot": {
+        "epochId": 3,
+        "productiveVolume": "50000000000",
+        "totalVolume": "500000000000",
+        "netExitVolume": "400000000000",
+        "shortTwapPriceX18": "950000000000000000",
+        "productiveSettlementPriceX18": "960000000000000000",
+        "realizedVolatilityBps": "650",
+        "productiveUsers": 140,
+        "repeatUsers": 18
+      },
+      "externalMetrics": {
+        "depthTo1Pct": "25000000000000000000000",
+        "depthTo2Pct": "60000000000000000000000",
+        "productiveGrowthBps": -1800,
+        "lpStabilityBps": "2500",
+        "idleShareBps": "4200",
+        "buybackMinAgcOut": "50000000000000000000000"
+      }
+    },
+    {
+      "name": "stagnant-demand",
+      "snapshot": {
+        "epochId": 4,
+        "productiveVolume": "120000000000",
+        "totalVolume": "900000000000",
+        "netExitVolume": "50000000000",
+        "shortTwapPriceX18": "1005000000000000000",
+        "productiveSettlementPriceX18": "1002000000000000000",
+        "realizedVolatilityBps": "140",
+        "productiveUsers": 220,
+        "repeatUsers": 70
+      },
+      "externalMetrics": {
+        "depthTo1Pct": "160000000000000000000000",
+        "depthTo2Pct": "300000000000000000000000",
+        "productiveGrowthBps": -100,
+        "lpStabilityBps": "7000",
+        "idleShareBps": "2800",
+        "buybackMinAgcOut": "0"
+      }
+    },
+    {
+      "name": "wash-trade-spam",
+      "snapshot": {
+        "epochId": 5,
+        "productiveVolume": "10000000000",
+        "totalVolume": "950000000000",
+        "netExitVolume": "5000000000",
+        "shortTwapPriceX18": "1015000000000000000",
+        "productiveSettlementPriceX18": "1010000000000000000",
+        "realizedVolatilityBps": "380",
+        "productiveUsers": 40,
+        "repeatUsers": 2
+      },
+      "externalMetrics": {
+        "depthTo1Pct": "150000000000000000000000",
+        "depthTo2Pct": "260000000000000000000000",
+        "productiveGrowthBps": 50,
+        "lpStabilityBps": "7800",
+        "idleShareBps": "3300",
+        "buybackMinAgcOut": "0"
+      }
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "ticker": "AGC",
+    "name": "Agent Credit Protocol",
+    "modelVersion": "launch-rewrite-1",
+    "epochDurationSeconds": 3600,
+    "quoteAsset": "USDC",
+    "quoteUnits": "normalized-1e18",
+    "acpUnits": "1e18",
+    "priceUnits": "X18",
+    "referenceSlippageBps": 100
+  },
+  "initialState": {
+    "anchorPriceX18": "500000000000000000",
+    "lastGrossBuyQuoteX18": "0",
+    "premiumPersistenceEpochs": 0,
+    "mintedTodayAcp": "0",
+    "lastRegime": "Neutral",
+    "recoveryCooldownEpochsRemaining": 0,
+    "floatSupplyAcp": "1000000000000000000000000",
+    "treasuryQuoteX18": "150000000000000000000000",
+    "treasuryAcp": "0",
+    "xacpTotalAssetsAcp": "150000000000000000000000"
+  },
+  "anchor": {
+    "anchorEmaBps": 300,
+    "maxAnchorCrawlBps": 10
+  },
+  "bandsBps": {
+    "normal": 300,
+    "stressed": 700
+  },
+  "reserveCoverageBps": {
+    "target": 3000,
+    "expansionMin": 2000,
+    "neutralLower": 1200,
+    "defense": 1200,
+    "hardDefense": 800
+  },
+  "expansion": {
+    "minPremiumBps": 100,
+    "premiumPersistenceRequired": 3,
+    "minGrossBuyFloorBps": 100,
+    "minLockedShareBps": 1000,
+    "targetGrossBuyBps": 500,
+    "targetNetBuyBps": 100,
+    "targetLockFlowBps": 100,
+    "targetBuyGrowthBps": 200,
+    "targetLockedShareBps": 2500,
+    "maxVolatilityBps": 150,
+    "maxExitPressureBps": 1800,
+    "expansionKappaBps": 150,
+    "maxMintPerEpochBps": 100,
+    "maxMintPerDayBps": 500
+  },
+  "defense": {
+    "defenseVolatilityBps": 400,
+    "defenseExitPressureBps": 3500,
+    "buybackKappaBps": 2500,
+    "mildDefenseSpendBps": 200,
+    "severeDefenseSpendBps": 1000,
+    "severeStressThresholdBps": 1000,
+    "recoveryCooldownEpochs": 6
+  },
+  "xacp": {
+    "rebase": false,
+    "exitFeeBps": 300
+  },
+  "distributionBps": {
+    "xacp": 5000,
+    "growthPrograms": 2000,
+    "lp": 1000,
+    "integrators": 500,
+    "treasury": 1500
+  },
+  "epochInputs": [
+    "priceTwapX18",
+    "grossBuyQuoteX18",
+    "grossSellQuoteX18",
+    "totalVolumeQuoteX18",
+    "depthToTargetSlippageQuoteX18",
+    "realizedVolatilityBps",
+    "xacpDepositsAcp",
+    "xacpGrossRedemptionsAcp",
+    "treasuryQuoteInflowX18"
+  ]
+}

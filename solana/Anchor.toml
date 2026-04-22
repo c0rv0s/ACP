@@ -1,0 +1,19 @@
+[toolchain]
+anchor_version = "1.0.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+agc_solana = "H1n8VTp6pMY5WFfVfi4MNkQ9q5szkMpVWcHQ21JRETXC"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test --manifest-path programs/agc_solana/Cargo.toml --lib"
