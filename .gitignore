@@ -6,6 +6,7 @@ dist/
 .DS_Store
 web/dist/
 web/.vite/
+web/source-assets/
 coverage/
 coverage-report/
 .env

@@ -1,31 +1,56 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="112" fill="#07090D"/>
-  <rect x="12" y="12" width="488" height="488" rx="100" fill="url(#bg)"/>
-  <rect x="12" y="12" width="488" height="488" rx="100" stroke="#FFF8E714" stroke-width="1"/>
-  <ellipse cx="256" cy="312" rx="214" ry="184" fill="url(#glow)"/>
-  <path d="M96 420 L256 108 L416 420" fill="none" stroke="url(#strokeGrad)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M178 308 L334 308" fill="none" stroke="url(#strokeGrad)" stroke-width="30" stroke-linecap="round"/>
-  <circle cx="420" cy="100" r="35" fill="url(#dot)" opacity="0.9"/>
+  <rect width="512" height="512" rx="92" fill="#030305"/>
+  <rect x="18" y="18" width="476" height="476" rx="78" fill="url(#stone)"/>
+  <rect x="18" y="18" width="476" height="476" rx="78" stroke="url(#outerGold)" stroke-width="4"/>
+  <rect x="42" y="42" width="428" height="428" rx="58" stroke="#E8C77A" stroke-opacity="0.28" stroke-width="2"/>
+
+  <path d="M86 406H426" stroke="#E8C77A" stroke-opacity="0.2" stroke-width="2"/>
+  <path d="M118 106H394" stroke="#E8C77A" stroke-opacity="0.16" stroke-width="2"/>
+  <path d="M256 82V430" stroke="#E8C77A" stroke-opacity="0.08" stroke-width="2"/>
+  <path d="M118 406L256 106L394 406" stroke="#E8C77A" stroke-opacity="0.18" stroke-width="2"/>
+
+  <circle cx="256" cy="258" r="151" stroke="url(#orbit)" stroke-width="17" stroke-linecap="round" stroke-dasharray="650 255"/>
+  <circle cx="256" cy="258" r="112" stroke="#E8C77A" stroke-opacity="0.12" stroke-width="2"/>
+
+  <path d="M121 394L241 138C247 125 265 125 271 138L392 394" stroke="url(#marbleGold)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M178 310H334" stroke="url(#marbleGold)" stroke-width="32" stroke-linecap="round"/>
+
+  <path d="M317 202C290 186 249 184 220 204C184 229 176 280 201 316C226 352 278 360 314 335" stroke="#F3EDDF" stroke-opacity="0.72" stroke-width="18" stroke-linecap="round"/>
+  <path d="M307 334H359V282" stroke="#E8C77A" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M256 106L286 174H226L256 106Z" fill="#F3EDDF" fill-opacity="0.22"/>
+  <path d="M256 106L286 174H226L256 106Z" stroke="#E8C77A" stroke-opacity="0.42" stroke-width="2"/>
+
+  <circle cx="389" cy="124" r="28" fill="url(#celestial)"/>
+  <circle cx="389" cy="124" r="28" stroke="#F3EDDF" stroke-opacity="0.2" stroke-width="2"/>
+
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#111827"/>
-      <stop offset="0.5" stop-color="#0B0F17"/>
-      <stop offset="1" stop-color="#0A0F16"/>
+    <linearGradient id="stone" x1="80" y1="42" x2="436" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11100E"/>
+      <stop offset="0.5" stop-color="#050608"/>
+      <stop offset="1" stop-color="#0C0B09"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 312) rotate(90) scale(184 214)">
-      <stop stop-color="#D9FF39" stop-opacity="0.20"/>
-      <stop offset="0.5" stop-color="#FF7112" stop-opacity="0.14"/>
-      <stop offset="1" stop-color="#FF4A8A" stop-opacity="0"/>
+    <linearGradient id="outerGold" x1="58" y1="22" x2="456" y2="494" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3EDDF" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#E8C77A"/>
+      <stop offset="1" stop-color="#8D6534"/>
+    </linearGradient>
+    <linearGradient id="marbleGold" x1="141" y1="119" x2="391" y2="406" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EFE0"/>
+      <stop offset="0.28" stop-color="#E8C77A"/>
+      <stop offset="0.62" stop-color="#D8AD61"/>
+      <stop offset="1" stop-color="#8D6534"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="143" y1="126" x2="386" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3EDDF" stop-opacity="0"/>
+      <stop offset="0.25" stop-color="#E8C77A" stop-opacity="0.58"/>
+      <stop offset="0.72" stop-color="#7FC8FF" stop-opacity="0.64"/>
+      <stop offset="1" stop-color="#F3EDDF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="celestial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(379 111) rotate(52) scale(53)">
+      <stop stop-color="#F3EDDF"/>
+      <stop offset="0.45" stop-color="#E8C77A"/>
+      <stop offset="1" stop-color="#7FC8FF"/>
     </radialGradient>
-    <linearGradient id="strokeGrad" x1="96" y1="108" x2="416" y2="420" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2CF6FF"/>
-      <stop offset="0.35" stop-color="#D9FF39"/>
-      <stop offset="0.7" stop-color="#FFB23E"/>
-      <stop offset="1" stop-color="#FF4A8A"/>
-    </linearGradient>
-    <linearGradient id="dot" x1="410" y1="118" x2="430" y2="138" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2CF6FF"/>
-      <stop offset="1" stop-color="#FF4A8A"/>
-    </linearGradient>
   </defs>
 </svg>
