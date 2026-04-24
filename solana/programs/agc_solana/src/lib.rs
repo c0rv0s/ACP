@@ -28,6 +28,8 @@ pub mod agc_solana {
     ) -> Result<()> {
         validate_mint_authority(&ctx.accounts.agc_mint, ctx.accounts.mint_authority.key())?;
         validate_mint_authority(&ctx.accounts.xagc_mint, ctx.accounts.mint_authority.key())?;
+        validate_no_freeze_authority(&ctx.accounts.agc_mint)?;
+        validate_no_freeze_authority(&ctx.accounts.xagc_mint)?;
         require_keys_eq!(
             ctx.accounts.agc_mint.key(),
             ctx.accounts.xagc_vault_agc.mint,
@@ -45,12 +47,15 @@ pub mod agc_solana {
             ctx.accounts.agc_mint.decimals <= 18,
             AgcError::UnsupportedDecimalConfig
         );
+        require!(args.initial_anchor_price_x18 > 0, AgcError::InvalidPrice);
+        validate_policy_params(args.policy_params)?;
         validate_distribution(args.mint_distribution)?;
         require!(args.exit_fee_bps < BPS as u16, AgcError::InvalidFee);
 
         let now = current_timestamp()?;
         let state = &mut ctx.accounts.state;
         state.admin = ctx.accounts.admin.key();
+        state.pending_admin = Pubkey::default();
         state.agc_mint = ctx.accounts.agc_mint.key();
         state.xagc_mint = ctx.accounts.xagc_mint.key();
         state.usdc_mint = ctx.accounts.usdc_mint.key();
@@ -60,6 +65,8 @@ pub mod agc_solana {
         state.growth_programs_agc = args.settlement_recipients.growth_programs_agc;
         state.lp_agc = args.settlement_recipients.lp_agc;
         state.integrators_agc = args.settlement_recipients.integrators_agc;
+        state.buyback_usdc_escrow = Pubkey::default();
+        state.market_adapter_authority = Pubkey::default();
         state.state_bump = ctx.bumps.state;
         state.mint_authority_bump = ctx.bumps.mint_authority;
         state.treasury_authority_bump = ctx.bumps.treasury_authority;
@@ -74,6 +81,7 @@ pub mod agc_solana {
         state.quote_scale = pow10_u128(18_u8 - ctx.accounts.usdc_mint.decimals)?;
         state.exit_fee_bps = args.exit_fee_bps;
         state.growth_programs_enabled = args.growth_programs_enabled;
+        state.pause_flags = PauseFlags::default();
         state.policy_params = args.policy_params;
         state.mint_distribution = args.mint_distribution;
         state.regime = Regime::Neutral;
@@ -106,20 +114,73 @@ pub mod agc_solana {
     }
 
     pub fn set_keeper(ctx: Context<SetKeeper>, allowed: bool) -> Result<()> {
-        let keeper = &mut ctx.accounts.keeper;
-        keeper.authority = ctx.accounts.keeper_authority.key();
-        keeper.allowed = allowed;
-        keeper.bump = ctx.bumps.keeper;
+        let permissions = if allowed {
+            KeeperPermissions::all()
+        } else {
+            KeeperPermissions::default()
+        };
+        set_keeper_permissions_inner(ctx, permissions)
+    }
 
-        emit!(KeeperUpdated {
-            keeper: keeper.authority,
-            allowed,
+    pub fn set_keeper_permissions(
+        ctx: Context<SetKeeper>,
+        permissions: KeeperPermissions,
+    ) -> Result<()> {
+        set_keeper_permissions_inner(ctx, permissions)
+    }
+
+    pub fn set_market_adapter_authority(
+        ctx: Context<SetMarketAdapterAuthority>,
+        authority: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts.state.market_adapter_authority = authority;
+        emit!(MarketAdapterAuthorityUpdated { authority });
+        Ok(())
+    }
+
+    pub fn set_buyback_usdc_escrow(ctx: Context<SetBuybackUsdcEscrow>) -> Result<()> {
+        ctx.accounts.state.buyback_usdc_escrow = ctx.accounts.buyback_usdc_escrow.key();
+        emit!(BuybackUsdcEscrowUpdated {
+            escrow: ctx.accounts.buyback_usdc_escrow.key(),
         });
+        Ok(())
+    }
 
+    pub fn transfer_admin(ctx: Context<TransferAdmin>, next_admin: Pubkey) -> Result<()> {
+        require!(next_admin != Pubkey::default(), AgcError::InvalidAdmin);
+        require_keys_neq!(next_admin, ctx.accounts.state.admin, AgcError::InvalidAdmin);
+        ctx.accounts.state.pending_admin = next_admin;
+        emit!(AdminTransferStarted {
+            current_admin: ctx.accounts.state.admin,
+            pending_admin: next_admin,
+        });
+        Ok(())
+    }
+
+    pub fn accept_admin(ctx: Context<AcceptAdmin>) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.pending_admin.key(),
+            ctx.accounts.state.pending_admin,
+            AgcError::Unauthorized
+        );
+        let previous_admin = ctx.accounts.state.admin;
+        ctx.accounts.state.admin = ctx.accounts.pending_admin.key();
+        ctx.accounts.state.pending_admin = Pubkey::default();
+        emit!(AdminTransferred {
+            previous_admin,
+            new_admin: ctx.accounts.state.admin,
+        });
+        Ok(())
+    }
+
+    pub fn set_pause_flags(ctx: Context<SetPauseFlags>, pause_flags: PauseFlags) -> Result<()> {
+        ctx.accounts.state.pause_flags = pause_flags;
+        emit!(PauseFlagsUpdated { pause_flags });
         Ok(())
     }
 
     pub fn set_policy_params(ctx: Context<SetPolicyParams>, params: PolicyParams) -> Result<()> {
+        validate_policy_params(params)?;
         ctx.accounts.state.policy_params = params;
         emit!(PolicyParametersUpdated {
             normal_band_bps: params.normal_band_bps,
@@ -168,6 +229,10 @@ pub mod agc_solana {
     }
 
     pub fn deposit_xagc(ctx: Context<DepositXagc>, assets: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.xagc_deposits_paused,
+            AgcError::Paused
+        );
         require!(assets > 0, AgcError::ZeroAmount);
 
         let state = &mut ctx.accounts.state;
@@ -221,6 +286,10 @@ pub mod agc_solana {
     }
 
     pub fn redeem_xagc(ctx: Context<RedeemXagc>, shares: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.xagc_redemptions_paused,
+            AgcError::Paused
+        );
         require!(shares > 0, AgcError::ZeroAmount);
         require!(
             ctx.accounts.owner_xagc.amount >= shares,
@@ -295,7 +364,11 @@ pub mod agc_solana {
     }
 
     pub fn record_swap(ctx: Context<RecordSwap>, args: RecordSwapArgs) -> Result<()> {
-        assert_keeper_or_admin(
+        require!(
+            !ctx.accounts.state.pause_flags.market_reporting_paused,
+            AgcError::Paused
+        );
+        assert_market_reporter_or_admin(
             &ctx.accounts.state,
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
@@ -350,7 +423,11 @@ pub mod agc_solana {
     }
 
     pub fn record_market_observation(ctx: Context<RecordSwap>, price_x18: u128) -> Result<()> {
-        assert_keeper_or_admin(
+        require!(
+            !ctx.accounts.state.pause_flags.market_reporting_paused,
+            AgcError::Paused
+        );
+        assert_market_reporter_or_admin(
             &ctx.accounts.state,
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
@@ -364,10 +441,15 @@ pub mod agc_solana {
         ctx: Context<SettleEpoch>,
         external_metrics: ExternalMetrics,
     ) -> Result<()> {
-        assert_keeper_or_admin(
+        require!(
+            !ctx.accounts.state.pause_flags.settlement_paused,
+            AgcError::Paused
+        );
+        assert_keeper_permission_or_admin(
             &ctx.accounts.state,
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
+            RequiredKeeperPermission::SettleEpoch,
         )?;
         require_keys_eq!(
             ctx.accounts.growth_programs_agc.key(),
@@ -386,6 +468,10 @@ pub mod agc_solana {
         );
 
         let now = current_timestamp()?;
+        {
+            let state = &mut ctx.accounts.state;
+            refresh_mint_window(state, now);
+        }
         let state_snapshot = ctx.accounts.state.clone();
         validate_settlement_window(&state_snapshot, now)?;
         require!(
@@ -450,7 +536,6 @@ pub mod agc_solana {
 
         {
             let state = &mut ctx.accounts.state;
-            refresh_mint_window(state, now);
             state.minted_in_current_day = checked_add_u128(
                 state.minted_in_current_day,
                 result.mint_budget_acp,
@@ -482,13 +567,27 @@ pub mod agc_solana {
         ctx: Context<ReserveTreasuryBuybackUsdc>,
         amount: u64,
     ) -> Result<()> {
-        assert_keeper_or_admin(
+        require!(
+            !ctx.accounts.state.pause_flags.buybacks_paused,
+            AgcError::Paused
+        );
+        assert_keeper_permission_or_admin(
             &ctx.accounts.state,
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
+            RequiredKeeperPermission::ExecuteBuyback,
         )?;
         require!(amount > 0, AgcError::ZeroAmount);
         let state = &mut ctx.accounts.state;
+        require!(
+            state.buyback_usdc_escrow != Pubkey::default(),
+            AgcError::BuybackEscrowNotConfigured
+        );
+        require_keys_eq!(
+            ctx.accounts.buyback_usdc_destination.key(),
+            state.buyback_usdc_escrow,
+            AgcError::InvalidBuybackEscrow
+        );
         let spend = amount.min(state.pending_treasury_buyback_usdc);
         require!(spend > 0, AgcError::NoPendingTreasuryBuyback);
 
@@ -520,10 +619,15 @@ pub mod agc_solana {
     }
 
     pub fn burn_treasury_agc(ctx: Context<BurnTreasuryAgc>, amount: u64) -> Result<()> {
-        assert_keeper_or_admin(
+        require!(
+            !ctx.accounts.state.pause_flags.treasury_burns_paused,
+            AgcError::Paused
+        );
+        assert_keeper_permission_or_admin(
             &ctx.accounts.state,
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
+            RequiredKeeperPermission::BurnTreasury,
         )?;
         require!(amount > 0, AgcError::ZeroAmount);
 
@@ -546,6 +650,23 @@ pub mod agc_solana {
 
         Ok(())
     }
+}
+
+fn set_keeper_permissions_inner(
+    ctx: Context<SetKeeper>,
+    permissions: KeeperPermissions,
+) -> Result<()> {
+    let keeper = &mut ctx.accounts.keeper;
+    keeper.authority = ctx.accounts.keeper_authority.key();
+    keeper.permissions = permissions;
+    keeper.bump = ctx.bumps.keeper;
+
+    emit!(KeeperPermissionsUpdated {
+        keeper: keeper.authority,
+        permissions,
+    });
+
+    Ok(())
 }
 
 #[derive(Accounts)]
@@ -624,6 +745,45 @@ pub struct SetKeeper<'info> {
     )]
     pub keeper: Box<Account<'info, Keeper>>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetMarketAdapterAuthority<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub admin: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetBuybackUsdcEscrow<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub admin: Signer<'info>,
+    #[account(
+        constraint = buyback_usdc_escrow.mint == state.usdc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub buyback_usdc_escrow: Box<Account<'info, TokenAccount>>,
+}
+
+#[derive(Accounts)]
+pub struct TransferAdmin<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub admin: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct AcceptAdmin<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub pending_admin: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetPauseFlags<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub admin: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -784,6 +944,7 @@ pub struct BurnTreasuryAgc<'info> {
 #[account]
 pub struct ProtocolState {
     pub admin: Pubkey,
+    pub pending_admin: Pubkey,
     pub agc_mint: Pubkey,
     pub xagc_mint: Pubkey,
     pub usdc_mint: Pubkey,
@@ -793,6 +954,8 @@ pub struct ProtocolState {
     pub growth_programs_agc: Pubkey,
     pub lp_agc: Pubkey,
     pub integrators_agc: Pubkey,
+    pub buyback_usdc_escrow: Pubkey,
+    pub market_adapter_authority: Pubkey,
     pub state_bump: u8,
     pub mint_authority_bump: u8,
     pub treasury_authority_bump: u8,
@@ -807,6 +970,7 @@ pub struct ProtocolState {
     pub quote_scale: u128,
     pub exit_fee_bps: u16,
     pub growth_programs_enabled: bool,
+    pub pause_flags: PauseFlags,
     pub policy_params: PolicyParams,
     pub mint_distribution: MintDistribution,
     pub regime: Regime,
@@ -842,12 +1006,60 @@ impl ProtocolState {
 #[account]
 pub struct Keeper {
     pub authority: Pubkey,
-    pub allowed: bool,
+    pub permissions: KeeperPermissions,
     pub bump: u8,
 }
 
 impl Keeper {
-    pub const LEN: usize = 32 + 1 + 1;
+    pub const LEN: usize = 32 + KeeperPermissions::LEN + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct KeeperPermissions {
+    pub market_reporter: bool,
+    pub epoch_settler: bool,
+    pub buyback_executor: bool,
+    pub treasury_burner: bool,
+}
+
+impl KeeperPermissions {
+    pub const LEN: usize = 4;
+
+    pub fn all() -> Self {
+        Self {
+            market_reporter: true,
+            epoch_settler: true,
+            buyback_executor: true,
+            treasury_burner: true,
+        }
+    }
+
+    fn allows(self, required: RequiredKeeperPermission) -> bool {
+        match required {
+            RequiredKeeperPermission::ReportMarket => self.market_reporter,
+            RequiredKeeperPermission::SettleEpoch => self.epoch_settler,
+            RequiredKeeperPermission::ExecuteBuyback => self.buyback_executor,
+            RequiredKeeperPermission::BurnTreasury => self.treasury_burner,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RequiredKeeperPermission {
+    ReportMarket,
+    SettleEpoch,
+    ExecuteBuyback,
+    BurnTreasury,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct PauseFlags {
+    pub xagc_deposits_paused: bool,
+    pub xagc_redemptions_paused: bool,
+    pub market_reporting_paused: bool,
+    pub settlement_paused: bool,
+    pub buybacks_paused: bool,
+    pub treasury_burns_paused: bool,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -1043,9 +1255,36 @@ pub struct ProtocolInitialized {
 }
 
 #[event]
-pub struct KeeperUpdated {
+pub struct KeeperPermissionsUpdated {
     pub keeper: Pubkey,
-    pub allowed: bool,
+    pub permissions: KeeperPermissions,
+}
+
+#[event]
+pub struct MarketAdapterAuthorityUpdated {
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct BuybackUsdcEscrowUpdated {
+    pub escrow: Pubkey,
+}
+
+#[event]
+pub struct AdminTransferStarted {
+    pub current_admin: Pubkey,
+    pub pending_admin: Pubkey,
+}
+
+#[event]
+pub struct AdminTransferred {
+    pub previous_admin: Pubkey,
+    pub new_admin: Pubkey,
+}
+
+#[event]
+pub struct PauseFlagsUpdated {
+    pub pause_flags: PauseFlags,
 }
 
 #[event]
@@ -1129,6 +1368,8 @@ pub enum AgcError {
     Unauthorized,
     #[msg("The configured SPL token mint authority is not the AGC program PDA.")]
     InvalidMintAuthority,
+    #[msg("The AGC-controlled mint must not have an external freeze authority.")]
+    InvalidFreezeAuthority,
     #[msg("The provided token account does not match the protocol configuration.")]
     InvalidTokenAccount,
     #[msg("The mint decimals are unsupported.")]
@@ -1137,6 +1378,8 @@ pub enum AgcError {
     InvalidMintDistribution,
     #[msg("The fee must be below 10_000 bps.")]
     InvalidFee,
+    #[msg("The policy parameters are internally inconsistent.")]
+    InvalidPolicyParams,
     #[msg("The amount must be non-zero.")]
     ZeroAmount,
     #[msg("The xAGC token account does not have enough shares.")]
@@ -1151,6 +1394,14 @@ pub enum AgcError {
     InvalidSettlementRecipient,
     #[msg("There is no queued treasury buyback budget.")]
     NoPendingTreasuryBuyback,
+    #[msg("The protocol buyback escrow has not been configured.")]
+    BuybackEscrowNotConfigured,
+    #[msg("The provided buyback escrow is not the configured escrow.")]
+    InvalidBuybackEscrow,
+    #[msg("The protocol is paused for this instruction.")]
+    Paused,
+    #[msg("The requested admin is invalid.")]
+    InvalidAdmin,
     #[msg("Arithmetic overflow or underflow.")]
     MathOverflow,
     #[msg("A u128 policy amount does not fit into a u64 SPL token amount.")]
@@ -1163,6 +1414,14 @@ fn validate_mint_authority(mint: &Account<Mint>, authority: Pubkey) -> Result<()
     require!(
         mint.mint_authority == COption::Some(authority),
         AgcError::InvalidMintAuthority
+    );
+    Ok(())
+}
+
+fn validate_no_freeze_authority(mint: &Account<Mint>) -> Result<()> {
+    require!(
+        mint.freeze_authority == COption::None,
+        AgcError::InvalidFreezeAuthority
     );
     Ok(())
 }
@@ -1180,10 +1439,150 @@ fn validate_distribution(distribution: MintDistribution) -> Result<()> {
     Ok(())
 }
 
-fn assert_keeper_or_admin(
+fn validate_policy_params(params: PolicyParams) -> Result<()> {
+    require!(
+        params.policy_epoch_duration > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.normal_band_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.stressed_band_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.normal_band_bps <= params.stressed_band_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.anchor_ema_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_anchor_crawl_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(params.min_premium_bps > 0, AgcError::InvalidPolicyParams);
+    require!(
+        params.target_gross_buy_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(params.target_net_buy_bps > 0, AgcError::InvalidPolicyParams);
+    require!(
+        params.target_lock_flow_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.target_buy_growth_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.target_locked_share_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.expansion_reserve_coverage_bps <= params.target_reserve_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.hard_defense_reserve_coverage_bps <= params.defense_reserve_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.defense_reserve_coverage_bps <= params.neutral_reserve_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.neutral_reserve_coverage_bps <= params.expansion_reserve_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_expansion_volatility_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.defense_volatility_bps > params.max_expansion_volatility_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_expansion_exit_pressure_bps > 0,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_expansion_exit_pressure_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.defense_exit_pressure_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.defense_exit_pressure_bps > params.max_expansion_exit_pressure_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.expansion_kappa_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_mint_per_epoch_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_mint_per_day_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.buyback_kappa_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.mild_defense_spend_bps <= params.severe_defense_spend_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.mild_defense_spend_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.severe_defense_spend_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.severe_stress_threshold_bps > 0 && params.severe_stress_threshold_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    Ok(())
+}
+
+fn assert_market_reporter_or_admin(
     state: &ProtocolState,
     authority_key: Pubkey,
     keeper_info: AccountInfo,
+) -> Result<()> {
+    if authority_key == state.admin {
+        return Ok(());
+    }
+    if state.market_adapter_authority != Pubkey::default()
+        && authority_key == state.market_adapter_authority
+    {
+        return Ok(());
+    }
+    assert_keeper_permission_or_admin(
+        state,
+        authority_key,
+        keeper_info,
+        RequiredKeeperPermission::ReportMarket,
+    )
+}
+
+fn assert_keeper_permission_or_admin(
+    state: &ProtocolState,
+    authority_key: Pubkey,
+    keeper_info: AccountInfo,
+    required: RequiredKeeperPermission,
 ) -> Result<()> {
     if authority_key == state.admin {
         return Ok(());
@@ -1193,7 +1592,7 @@ fn assert_keeper_or_admin(
     let data = keeper_info.try_borrow_data()?;
     let mut data_slice: &[u8] = &data;
     let keeper = Keeper::try_deserialize(&mut data_slice)?;
-    require!(keeper.allowed, AgcError::Unauthorized);
+    require!(keeper.permissions.allows(required), AgcError::Unauthorized);
     require_keys_eq!(keeper.authority, authority_key, AgcError::Unauthorized);
     Ok(())
 }
@@ -1820,13 +2219,12 @@ fn allocate_mint(mint_budget_acp: u128, distribution: MintDistribution) -> MintA
 }
 
 fn validate_settlement_window(state: &ProtocolState, now: u64) -> Result<()> {
-    if state.last_settlement_timestamp != 0 {
-        let next_allowed = state
-            .last_settlement_timestamp
-            .checked_add(state.policy_params.policy_epoch_duration)
-            .ok_or(AgcError::MathOverflow)?;
-        require!(now >= next_allowed, AgcError::EpochTooSoon);
-    }
+    let next_allowed = state
+        .accumulator
+        .started_at
+        .checked_add(state.policy_params.policy_epoch_duration)
+        .ok_or(AgcError::MathOverflow)?;
+    require!(now >= next_allowed, AgcError::EpochTooSoon);
     Ok(())
 }
 
@@ -1845,6 +2243,10 @@ fn persist_epoch_settlement(
     raw_buyback_budget: u64,
     now: u64,
 ) -> Result<()> {
+    let next_epoch_id = snapshot
+        .epoch_id
+        .checked_add(1)
+        .ok_or(AgcError::MathOverflow)?;
     state.anchor_price_x18 = result.anchor_next_x18;
     state.premium_persistence_epochs = result.premium_persistence_epochs;
     state.last_gross_buy_quote_x18 = result.gross_buy_quote_x18;
@@ -1877,7 +2279,7 @@ fn persist_epoch_settlement(
 
     let current_mid_price_x18 = state.accumulator.last_mid_price_x18;
     state.accumulator = EpochAccumulator {
-        epoch_id: snapshot.epoch_id + 1,
+        epoch_id: next_epoch_id,
         started_at: now,
         updated_at: now,
         last_observed_at: now,
@@ -2036,6 +2438,16 @@ mod tests {
 
     const PRICE_SCALE: u128 = 1_000_000_000_000_000_000;
 
+    fn distribution() -> MintDistribution {
+        MintDistribution {
+            xagc_bps: 3_000,
+            growth_programs_bps: 2_000,
+            lp_bps: 2_000,
+            integrators_bps: 1_000,
+            treasury_bps: 2_000,
+        }
+    }
+
     fn params() -> PolicyParams {
         PolicyParams {
             normal_band_bps: 300,
@@ -2069,6 +2481,79 @@ mod tests {
             severe_stress_threshold_bps: 1_000,
             recovery_cooldown_epochs: 2,
             policy_epoch_duration: 3_600,
+        }
+    }
+
+    fn test_state() -> ProtocolState {
+        ProtocolState {
+            admin: Pubkey::default(),
+            pending_admin: Pubkey::default(),
+            agc_mint: Pubkey::default(),
+            xagc_mint: Pubkey::default(),
+            usdc_mint: Pubkey::default(),
+            treasury_agc: Pubkey::default(),
+            treasury_usdc: Pubkey::default(),
+            xagc_vault_agc: Pubkey::default(),
+            growth_programs_agc: Pubkey::default(),
+            lp_agc: Pubkey::default(),
+            integrators_agc: Pubkey::default(),
+            buyback_usdc_escrow: Pubkey::default(),
+            market_adapter_authority: Pubkey::default(),
+            state_bump: 0,
+            mint_authority_bump: 0,
+            treasury_authority_bump: 0,
+            xagc_authority_bump: 0,
+            treasury_agc_bump: 0,
+            treasury_usdc_bump: 0,
+            xagc_vault_agc_bump: 0,
+            agc_decimals: 9,
+            xagc_decimals: 9,
+            usdc_decimals: 6,
+            agc_unit: 1_000_000_000,
+            quote_scale: 1_000_000_000_000,
+            exit_fee_bps: 100,
+            growth_programs_enabled: true,
+            pause_flags: PauseFlags::default(),
+            policy_params: params(),
+            mint_distribution: distribution(),
+            regime: Regime::Neutral,
+            anchor_price_x18: PRICE_SCALE,
+            premium_persistence_epochs: 0,
+            last_gross_buy_quote_x18: 0,
+            last_coverage_bps: 0,
+            last_exit_pressure_bps: 0,
+            last_volatility_bps: 0,
+            last_premium_bps: 0,
+            last_locked_share_bps: 0,
+            last_lock_flow_bps: 0,
+            last_settled_epoch: 0,
+            last_settlement_timestamp: 0,
+            recovery_cooldown_epochs_remaining: 0,
+            mint_window_day: 0,
+            minted_in_current_day: 0,
+            pending_treasury_buyback_usdc: 0,
+            xagc_gross_deposits_total: 0,
+            xagc_gross_redemptions_total: 0,
+            xagc_unaccounted_assets: 0,
+            last_xagc_deposit_total: 0,
+            last_xagc_redemption_total: 0,
+            buyback_execution_nonce: 0,
+            accumulator: EpochAccumulator {
+                epoch_id: 1,
+                started_at: 1_000,
+                updated_at: 1_000,
+                last_observed_at: 1_000,
+                observation_count: 1,
+                gross_buy_volume_quote_x18: 0,
+                gross_sell_volume_quote_x18: 0,
+                total_volume_quote_x18: 0,
+                last_mid_price_x18: PRICE_SCALE,
+                cumulative_mid_price_time_x18: 0,
+                cumulative_abs_mid_price_change_bps: 0,
+                total_hook_fees_quote_x18: 0,
+                total_hook_fees_agc: 0,
+            },
+            last_epoch_result: EpochResult::default(),
         }
     }
 
@@ -2182,5 +2667,234 @@ mod tests {
 
         let assets = convert_to_assets(250, 1_250, 2_500, 0).unwrap();
         assert_eq!(assets, 500);
+    }
+
+    #[test]
+    fn invalid_policy_params_are_rejected() {
+        let mut zero_duration = params();
+        zero_duration.policy_epoch_duration = 0;
+        assert!(validate_policy_params(zero_duration).is_err());
+
+        let mut invalid_band = params();
+        invalid_band.normal_band_bps = 4_000;
+        invalid_band.stressed_band_bps = 3_000;
+        assert!(validate_policy_params(invalid_band).is_err());
+
+        let mut invalid_reserve_targets = params();
+        invalid_reserve_targets.expansion_reserve_coverage_bps = 4_000;
+        invalid_reserve_targets.target_reserve_coverage_bps = 3_000;
+        assert!(validate_policy_params(invalid_reserve_targets).is_err());
+
+        let mut invalid_mint_cap = params();
+        invalid_mint_cap.max_mint_per_day_bps = 10_001;
+        assert!(validate_policy_params(invalid_mint_cap).is_err());
+
+        let mut invalid_exit_thresholds = params();
+        invalid_exit_thresholds.defense_exit_pressure_bps =
+            invalid_exit_thresholds.max_expansion_exit_pressure_bps;
+        assert!(validate_policy_params(invalid_exit_thresholds).is_err());
+
+        let mut invalid_volatility_thresholds = params();
+        invalid_volatility_thresholds.defense_volatility_bps =
+            invalid_volatility_thresholds.max_expansion_volatility_bps;
+        assert!(validate_policy_params(invalid_volatility_thresholds).is_err());
+    }
+
+    #[test]
+    fn keeper_permissions_are_role_scoped() {
+        let permissions = KeeperPermissions {
+            market_reporter: true,
+            epoch_settler: false,
+            buyback_executor: true,
+            treasury_burner: false,
+        };
+
+        assert!(permissions.allows(RequiredKeeperPermission::ReportMarket));
+        assert!(!permissions.allows(RequiredKeeperPermission::SettleEpoch));
+        assert!(permissions.allows(RequiredKeeperPermission::ExecuteBuyback));
+        assert!(!permissions.allows(RequiredKeeperPermission::BurnTreasury));
+
+        let all_permissions = KeeperPermissions::all();
+        assert!(all_permissions.allows(RequiredKeeperPermission::ReportMarket));
+        assert!(all_permissions.allows(RequiredKeeperPermission::SettleEpoch));
+        assert!(all_permissions.allows(RequiredKeeperPermission::ExecuteBuyback));
+        assert!(all_permissions.allows(RequiredKeeperPermission::BurnTreasury));
+    }
+
+    #[test]
+    fn initial_epoch_requires_full_duration_before_settlement() {
+        let state = test_state();
+        assert!(validate_settlement_window(&state, 4_599).is_err());
+        assert!(validate_settlement_window(&state, 4_600).is_ok());
+    }
+
+    #[test]
+    fn refresh_mint_window_resets_across_day_boundary() {
+        let mut state = test_state();
+        state.mint_window_day = 10;
+        state.minted_in_current_day = 123_456;
+
+        refresh_mint_window(&mut state, 10 * SECONDS_PER_DAY + 42);
+        assert_eq!(state.mint_window_day, 10);
+        assert_eq!(state.minted_in_current_day, 123_456);
+
+        refresh_mint_window(&mut state, 11 * SECONDS_PER_DAY);
+        assert_eq!(state.mint_window_day, 11);
+        assert_eq!(state.minted_in_current_day, 0);
+    }
+
+    #[test]
+    fn persist_epoch_settlement_rolls_state_forward() {
+        let mut state = test_state();
+        state.pending_treasury_buyback_usdc = 75;
+        state.xagc_gross_deposits_total = 900;
+        state.xagc_gross_redemptions_total = 125;
+        state.accumulator.epoch_id = 7;
+        state.accumulator.last_mid_price_x18 = PRICE_SCALE * 103 / 100;
+
+        let snapshot = EpochSnapshot {
+            epoch_id: 7,
+            started_at: 1_000,
+            ended_at: 4_600,
+            gross_buy_volume_quote_x18: 55_000 * PRICE_SCALE,
+            gross_sell_volume_quote_x18: 10_000 * PRICE_SCALE,
+            total_volume_quote_x18: 65_000 * PRICE_SCALE,
+            short_twap_price_x18: PRICE_SCALE * 102 / 100,
+            realized_volatility_bps: 80,
+            total_hook_fees_quote_x18: 0,
+            total_hook_fees_agc: 0,
+        };
+        let result = EpochResult {
+            epoch_id: 7,
+            regime: Regime::Defense,
+            anchor_price_x18: PRICE_SCALE,
+            anchor_next_x18: PRICE_SCALE * 101 / 100,
+            premium_bps: 200,
+            premium_persistence_epochs: 3,
+            gross_buy_quote_x18: 55_000 * PRICE_SCALE,
+            reserve_coverage_bps: 1_200,
+            exit_pressure_bps: 1_500,
+            realized_volatility_bps: 80,
+            locked_share_bps: 2_800,
+            lock_flow_bps: 150,
+            ..EpochResult::default()
+        };
+
+        persist_epoch_settlement(&mut state, snapshot, result, 25, 4_600).unwrap();
+
+        assert_eq!(state.anchor_price_x18, PRICE_SCALE * 101 / 100);
+        assert_eq!(state.premium_persistence_epochs, 3);
+        assert_eq!(state.last_gross_buy_quote_x18, 55_000 * PRICE_SCALE);
+        assert_eq!(state.regime, Regime::Defense);
+        assert_eq!(
+            state.recovery_cooldown_epochs_remaining,
+            params().recovery_cooldown_epochs as u64
+        );
+        assert_eq!(state.pending_treasury_buyback_usdc, 100);
+        assert_eq!(state.last_settled_epoch, 7);
+        assert_eq!(state.last_settlement_timestamp, 4_600);
+        assert_eq!(state.last_xagc_deposit_total, 900);
+        assert_eq!(state.last_xagc_redemption_total, 125);
+        assert_eq!(state.accumulator.epoch_id, 8);
+        assert_eq!(state.accumulator.started_at, 4_600);
+        assert_eq!(
+            state.accumulator.last_mid_price_x18,
+            PRICE_SCALE * 103 / 100
+        );
+        assert_eq!(state.accumulator.observation_count, 1);
+        assert_eq!(state.accumulator.total_volume_quote_x18, 0);
+    }
+
+    #[test]
+    fn recovery_cooldown_counts_down_when_stress_clears() {
+        let snapshot = EpochSnapshot {
+            epoch_id: 2,
+            started_at: 3_600,
+            ended_at: 7_200,
+            gross_buy_volume_quote_x18: 40_000 * PRICE_SCALE,
+            gross_sell_volume_quote_x18: 10_000 * PRICE_SCALE,
+            total_volume_quote_x18: 50_000 * PRICE_SCALE,
+            short_twap_price_x18: PRICE_SCALE,
+            realized_volatility_bps: 20,
+            total_hook_fees_quote_x18: 0,
+            total_hook_fees_agc: 0,
+        };
+        let state = PolicyState {
+            anchor_price_x18: PRICE_SCALE,
+            premium_persistence_epochs: 0,
+            last_gross_buy_quote_x18: 40_000 * PRICE_SCALE,
+            minted_today_acp: 0,
+            last_regime: Regime::Defense,
+            recovery_cooldown_epochs_remaining: 1,
+            float_supply_acp: 1_000_000_000_000_000,
+            treasury_quote_x18: 400_000 * PRICE_SCALE,
+            treasury_acp: 0,
+            xagc_total_assets_acp: 250_000_000_000_000,
+        };
+
+        let result = evaluate_epoch(
+            snapshot,
+            ExternalMetrics {
+                depth_to_target_slippage_quote_x18: 500_000 * PRICE_SCALE,
+            },
+            state,
+            VaultFlows::default(),
+            params(),
+            1_000_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(result.regime, Regime::Recovery);
+        assert_eq!(result.mint_budget_acp, 0);
+        assert_eq!(result.buyback_budget_quote_x18, 0);
+    }
+
+    #[test]
+    fn daily_mint_cap_blocks_additional_expansion_budget() {
+        let snapshot = EpochSnapshot {
+            epoch_id: 3,
+            started_at: 7_200,
+            ended_at: 10_800,
+            gross_buy_volume_quote_x18: 100_000 * PRICE_SCALE,
+            gross_sell_volume_quote_x18: 10_000 * PRICE_SCALE,
+            total_volume_quote_x18: 110_000 * PRICE_SCALE,
+            short_twap_price_x18: PRICE_SCALE * 104 / 100,
+            realized_volatility_bps: 50,
+            total_hook_fees_quote_x18: 0,
+            total_hook_fees_agc: 0,
+        };
+        let float_supply_acp = 1_000_000_000_000_000_u128;
+        let daily_cap_acp = float_supply_acp * params().max_mint_per_day_bps as u128 / BPS;
+        let state = PolicyState {
+            anchor_price_x18: PRICE_SCALE,
+            premium_persistence_epochs: 1,
+            last_gross_buy_quote_x18: 50_000 * PRICE_SCALE,
+            minted_today_acp: daily_cap_acp,
+            last_regime: Regime::Neutral,
+            recovery_cooldown_epochs_remaining: 0,
+            float_supply_acp,
+            treasury_quote_x18: 200_000 * PRICE_SCALE,
+            treasury_acp: 0,
+            xagc_total_assets_acp: 250_000_000_000_000,
+        };
+        let flows = VaultFlows {
+            xagc_deposits_acp: 20_000_000_000_000,
+            xagc_gross_redemptions_acp: 0,
+        };
+
+        let result = evaluate_epoch(
+            snapshot,
+            ExternalMetrics {
+                depth_to_target_slippage_quote_x18: 600_000 * PRICE_SCALE,
+            },
+            state,
+            flows,
+            params(),
+            1_000_000_000,
+        )
+        .unwrap();
+
+        assert_eq!(result.regime, Regime::Expansion);
+        assert_eq!(result.mint_budget_acp, 0);
     }
 }
