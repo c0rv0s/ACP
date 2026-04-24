@@ -45,6 +45,7 @@ const landingSections = [
       desktopMp4: "/art-deco/statue_city-loop-1080.mp4",
       mobileMp4: "/art-deco/statue_city-loop-720.mp4",
     },
+    playbackRate: 1,
     poster: "/art-deco/statue_city_poster.jpg",
     eyebrow: "Agent Credit Protocol",
     title: "Credit for autonomous markets.",
@@ -59,6 +60,7 @@ const landingSections = [
       desktopMp4: "/art-deco/city_orbit-loop-1080.mp4",
       mobileMp4: "/art-deco/city_orbit-loop-720.mp4",
     },
+    playbackRate: 1.5,
     poster: "/art-deco/city_orbit_poster.jpg",
     eyebrow: "The gap",
     title: "Autonomous demand needs balance sheet motion.",
@@ -73,6 +75,7 @@ const landingSections = [
       desktopMp4: "/art-deco/statue_orbit-loop-1080.mp4",
       mobileMp4: "/art-deco/statue_orbit-loop-720.mp4",
     },
+    playbackRate: 0.8,
     poster: "/art-deco/statue_orbit_poster.jpg",
     eyebrow: "Mechanism",
     title: "The market is the policy surface.",
@@ -238,12 +241,14 @@ function Field({
 function CrossfadeVideo({
   sources,
   poster,
+  isActive,
   shouldLoad,
   preload,
   playbackRate = 1,
 }: {
   sources: { desktopMp4: string; mobileMp4: string };
   poster: string;
+  isActive: boolean;
   shouldLoad: boolean;
   preload: "auto" | "metadata";
   playbackRate?: number;
@@ -262,6 +267,11 @@ function CrossfadeVideo({
   function prepareVideo(video: HTMLVideoElement | null) {
     if (!video) return;
     video.playbackRate = playbackRate;
+  }
+
+  function pauseVideo(video: HTMLVideoElement | null) {
+    if (!video) return;
+    video.pause();
   }
 
   function startCrossfade(fromSlot: 0 | 1) {
@@ -298,6 +308,36 @@ function CrossfadeVideo({
     prepareVideo(firstVideoRef.current);
     prepareVideo(secondVideoRef.current);
   }, [playbackRate]);
+
+  useEffect(() => {
+    const firstVideo = firstVideoRef.current;
+    const secondVideo = secondVideoRef.current;
+
+    if (!shouldLoad) {
+      isCrossfadingRef.current = false;
+      pauseVideo(firstVideo);
+      pauseVideo(secondVideo);
+      return;
+    }
+
+    firstVideo?.load();
+    secondVideo?.load();
+  }, [shouldLoad, sources.desktopMp4, sources.mobileMp4]);
+
+  useEffect(() => {
+    const firstVideo = firstVideoRef.current;
+    const secondVideo = secondVideoRef.current;
+
+    if (!isActive || !shouldLoad) {
+      pauseVideo(firstVideo);
+      pauseVideo(secondVideo);
+      return;
+    }
+
+    const activeVideo = videoForSlot(activeSlot);
+    prepareVideo(activeVideo);
+    void activeVideo?.play();
+  }, [activeSlot, isActive, playbackRate, shouldLoad]);
 
   return (
     <div className="cinema-video-stack" aria-hidden="true">
@@ -448,8 +488,10 @@ function LandingPage() {
             <CrossfadeVideo
               sources={section.video}
               poster={section.poster}
+              isActive={activeScene === index}
               shouldLoad={shouldLoadVideo}
               preload={activeScene === index ? "auto" : "metadata"}
+              playbackRate={section.playbackRate}
             />
           <div className="cinema-vignette" aria-hidden="true" />
           <div className="cinema-content">
@@ -492,8 +534,10 @@ function LandingPage() {
         <CrossfadeVideo
           sources={footerVideo}
           poster="/art-deco/statue_orbit_pillars_poster.jpg"
+          isActive={activeScene === landingSections.length}
           shouldLoad={activeScene >= landingSections.length - 1}
           preload={activeScene === landingSections.length ? "auto" : "metadata"}
+          playbackRate={0.75}
         />
         <div className="cinema-vignette" aria-hidden="true" />
         <div className="footer-cinema-content">
