@@ -24,7 +24,7 @@ const landingSections = [
       mobileMp4: "/art-deco/statue_city-loop-720.mp4",
     },
     playbackRate: 1,
-    poster: "/art-deco/statue_city_poster.jpg",
+    poster: "/art-deco/statue_city_poster.webp",
     eyebrow: "Agent Credit Protocol",
     title: "Credit inventory for machine economies.",
     text:
@@ -40,7 +40,7 @@ const landingSections = [
       mobileMp4: "/art-deco/city_orbit-loop-720.mp4",
     },
     playbackRate: 1.5,
-    poster: "/art-deco/city_orbit_poster.jpg",
+    poster: "/art-deco/city_orbit_poster.webp",
     eyebrow: "The problem",
     title: "Static dollars cannot power a live machine economy.",
     text:
@@ -56,7 +56,7 @@ const landingSections = [
       mobileMp4: "/art-deco/statue_orbit-loop-720.mp4",
     },
     playbackRate: 0.8,
-    poster: "/art-deco/statue_orbit_poster.jpg",
+    poster: "/art-deco/statue_orbit_poster.webp",
     eyebrow: "Upside",
     title: "Own the credit machine before it gets crowded.",
     text:
@@ -451,13 +451,13 @@ function LandingPage() {
       >
         <img
           className="cinema-poster"
-          src="/art-deco/statue_orbit_pillars_poster.jpg"
+          src="/art-deco/statue_orbit_pillars_poster.webp"
           alt=""
           aria-hidden="true"
         />
         <CrossfadeVideo
           sources={footerVideo}
-          poster="/art-deco/statue_orbit_pillars_poster.jpg"
+          poster="/art-deco/statue_orbit_pillars_poster.webp"
           isActive={activeScene === landingSections.length}
           shouldLoad={activeScene >= landingSections.length - 1}
           preload={activeScene === landingSections.length ? "auto" : "metadata"}
@@ -486,32 +486,32 @@ function LandingPage() {
 
 const docVisuals = {
   flywheel: {
-    src: "/docs/diagrams/credit-flywheel.png",
+    src: "/docs/diagrams/credit-flywheel.webp",
     alt: "AGC credit flywheel diagram",
     steps: ["Demand", "Reserves", "Credit capacity", "xAGC upside"],
   },
   reserves: {
-    src: "/docs/diagrams/reserve-buckets.png",
+    src: "/docs/diagrams/reserve-buckets.webp",
     alt: "AGC reserve bucket diagram",
     steps: ["Cash", "BTC", "RWA", "Haircuts"],
   },
   defense: {
-    src: "/docs/diagrams/defense-controls.png",
+    src: "/docs/diagrams/defense-controls.webp",
     alt: "AGC defense controls diagram",
     steps: ["Caps", "Oracles", "Pauses", "Buybacks"],
   },
   vault: {
-    src: "/docs/diagrams/credit-flywheel.png",
+    src: "/docs/diagrams/credit-flywheel.webp",
     alt: "xAGC vault flow diagram",
     steps: ["Deposit AGC", "Receive xAGC", "Expansion enters vault", "Redeem with fee"],
   },
   governance: {
-    src: "/docs/diagrams/defense-controls.png",
+    src: "/docs/diagrams/defense-controls.webp",
     alt: "AGC governance control diagram",
     steps: ["Admin", "Risk", "Emergency", "Upgrade"],
   },
   integration: {
-    src: "/docs/diagrams/reserve-buckets.png",
+    src: "/docs/diagrams/reserve-buckets.webp",
     alt: "AGC Solana integration diagram",
     steps: ["PDAs", "Vaults", "Collateral accounts", "Oracle feeds"],
   },
@@ -1149,7 +1149,7 @@ function DashboardPage() {
 
       <section id="policy" className="section policy-section">
         <div className="policy-visual">
-          <img src="/art-deco/policy-engine.png" alt="" />
+          <img src="/art-deco/policy-engine.webp" alt="" />
         </div>
         <div className="policy-copy">
           <p className="eyebrow">Expansion control</p>
