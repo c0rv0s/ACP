@@ -1,6 +1,6 @@
 # Agent Credit Protocol Full AI Context
 
-AGC is a reserve-efficient credit protocol designed for Solana. The protocol creates a constructive "money printer": circulating AGC grows quickly when the balance sheet, collateral base, liquidity, credit demand, and oracle quality support it, and stops expanding or defends when those conditions weaken.
+AGC is Solana-native credit inventory for machine economies. It creates a constructive credit machine: circulating AGC grows when the balance sheet, collateral base, liquidity, credit demand, and oracle quality prove the system can carry more supply, and it stops expanding or defends when those conditions weaken.
 
 AGC does not mint merely because spot price pumped or because a keeper reports buy pressure. Every expansion leaves the protocol with more assets, more revenue, or higher-quality credit claims than before.
 
@@ -8,7 +8,7 @@ AGC does not mint merely because spot price pumped or because a keeper reports b
 
 AGC is the circulating credit unit. It is liquid inventory for agents, applications, borrowers, and users.
 
-xAGC is the long-duration savings and upside share. It receives most expansion flow and later protocol revenue. It is non-rebasing, with value accruing through a higher AGC-per-xAGC exchange rate.
+xAGC is the long-duration expansion share. It receives most expansion flow and later protocol revenue. It is non-rebasing, with value accruing through a higher AGC-per-xAGC exchange rate.
 
 USDC and USDT are defensive cash reserves. They support buybacks, exits, reserve coverage, and the primary AGC/USDC market.
 
@@ -114,7 +114,7 @@ Risk-reducing actions can happen quickly. Risk-increasing actions are operationa
 
 ## Demand Path
 
-AGC demand comes from scarce access to credit capacity and ownership of the growth machine.
+AGC demand comes from scarce access to credit capacity and ownership of the expansion layer.
 
 Demand sources:
 
@@ -122,7 +122,7 @@ Demand sources:
 - agent working-capital balances
 - credit access requirements
 - xAGC ownership of expansion and revenue
-- underwriter yield from first-loss credit pools
+- underwriter spread from first-loss credit pools
 - BTC reserve upside
 - repaid-credit incentives
 
@@ -153,7 +153,7 @@ Good FOMO:
 
 Bad FOMO:
 
-- emissions-only APY
+- inflation marketed as yield
 - minting because price pumped
 - unbounded rebases
 - fake buybacks
@@ -185,7 +185,7 @@ The Solana program includes:
 - PDA-signed collateral seizure
 - upgradeable program authority model with reserved account space
 
-Remaining before production:
+Production integration roadmap:
 
 - direct Pyth or Switchboard oracle adapter validation
 - on-chain reserve valuation from actual token accounts

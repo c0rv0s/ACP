@@ -1,11 +1,11 @@
 # Agent Credit Protocol
 
-> AGC is a Solana-native reserve-efficient credit protocol. It expands circulating AGC only when reserves, collateral, liquidity, oracle quality, credit demand, and hard mint caps support expansion.
+> AGC is Solana-native credit inventory for machine economies. It expands circulating AGC only when reserves, collateral, liquidity, oracle quality, credit demand, and hard mint caps prove the balance sheet can carry more supply.
 
 Important notes:
 
 - AGC is not a hard-peg stablecoin.
-- xAGC is the long-duration savings and upside share.
+- xAGC is the long-duration expansion share.
 - USDC and USDT are defensive cash reserves.
 - BTC wrappers are strategic reserve collateral with haircuts.
 - Tokenized stocks and RWAs start isolated before they count in global reserve coverage.
@@ -30,4 +30,4 @@ Important notes:
 ## Optional
 
 - [Landing page](/): Public product framing.
-- [Dashboard](/dashboard): Contract telemetry and transaction surface. Live actions require configured deployment addresses.
+- [AGC console](/dashboard): AGC swap, xAGC, credit facility, and expansion-state surface. Live actions require configured deployment addresses.

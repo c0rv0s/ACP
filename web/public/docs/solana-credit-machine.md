@@ -1,13 +1,13 @@
 # AGC Solana Credit Machine
 
-AGC is a reserve-efficient credit machine on Solana. It expands circulating AGC only when the protocol gains stablecoin reserves, risk-weighted BTC exposure, isolated RWA collateral, real protocol revenue, or high-quality credit claims.
+AGC is credit inventory for machine economies: a Solana-native credit machine that expands circulating AGC when the balance sheet, collateral base, liquidity, and credit demand justify it, then slows or defends when those conditions weaken.
 
-The important question for a holder is not whether the protocol can print. It is whether every expansion leaves the system stronger than it was before. AGC is built around that standard.
+For a holder, the important question is not whether the system can print. It is whether every expansion leaves the system with more reserves, more revenue, or better credit claims than before. AGC is built around that standard.
 
 ## Overview
 
-- `AGC` is the circulating credit unit.
-- `xAGC` is the savings and upside share.
+- `AGC` is liquid credit inventory.
+- `xAGC` owns the long-duration expansion layer.
 - USDC and USDT are defensive cash reserves.
 - BTC wrappers are strategic reserve collateral with haircuts.
 - Tokenized stocks and RWAs start in isolated buckets.
@@ -20,7 +20,7 @@ Every expansion leaves the protocol with more assets, more revenue, or better cr
 
 ## Reserve Model
 
-For holders, reserves are what make expansion credible. AGC can accept several reserve or collateral assets, but they do not count equally.
+Reserves are what make expansion credible. AGC can accept several reserve or collateral assets, but they do not count equally.
 
 ### Cash bucket
 
@@ -28,7 +28,7 @@ USDC and USDT support immediate defense, buybacks, and AGC/USDC liquidity. They 
 
 ### BTC bucket
 
-BTC wrappers can create upside and strategic reserve strength, but each wrapper is a separate risk object. cbBTC, tBTC, Wormhole WBTC, zBTC, and future wrappers each have their own oracle, reserve weight, concentration cap, and liquidity assumptions.
+BTC wrappers create strategic reserve strength and upside, but each wrapper is a separate risk object. cbBTC, tBTC, Wormhole WBTC, zBTC, and future wrappers each have their own oracle, reserve weight, concentration cap, and liquidity assumptions.
 
 ### RWA bucket
 
@@ -56,13 +56,13 @@ Defense starts when price, reserve coverage, stable cash coverage, oracle health
 
 ## Credit Facilities
 
-Credit facilities are the borrower side of AGC. Each facility is tied to one collateral mint, one collateral vault, one AGC underwriter vault, debt caps, health thresholds, oracle limits, and pause controls.
+Credit facilities are the borrower side of AGC. Each facility is tied to one collateral mint, one collateral reserve, one AGC first-loss reserve, debt caps, health thresholds, oracle limits, and pause controls.
 
 The flow:
 
 ```text
 risk governance opens a facility
--> underwriters deposit AGC as first-loss capital
+-> underwriters deposit AGC into the first-loss reserve
 -> an approved borrower opens a credit line
 -> the borrower deposits collateral
 -> the borrower draws AGC inside collateral, facility, and reserve limits
@@ -70,28 +70,28 @@ risk governance opens a facility
 -> default burns underwriter reserve and routes seized collateral to the configured reserve account
 ```
 
-This is how AGC creates credit without pretending collateral does not matter. A draw creates AGC, but the other side of the balance sheet is visible: collateral in a PDA vault, underwriter AGC behind the line, interest owed by the borrower, and liquidation rights if the line breaks.
+This is how AGC creates credit without pretending collateral does not matter. A draw creates AGC, but the other side of the balance sheet is visible: collateral in reserve, underwriter AGC behind the line, interest owed by the borrower, and liquidation rights if the line breaks.
 
 ## Governance
 
-AGC governance is structured for a live credit protocol: fast enough to reduce risk, constrained enough to avoid arbitrary control.
+AGC governance is structured for a live credit protocol: fast enough to reduce risk, constrained enough to avoid arbitrary control. The launch model uses Solana multisigs rather than token voting or a single founder wallet.
 
-- High-level control sits behind Solana multisigs rather than one hot wallet.
-- Admin authority covers migration and high-level configuration.
-- Risk authority sets policy parameters, collateral configs, reserve weights, mint caps, and distributions inside hard limits.
-- Emergency authority can pause minting, settlement, collateral updates, buybacks, and vault operations.
+- Admin multisig manages authority migration and high-level configuration.
+- Risk multisig tunes collateral, reserve, expansion, credit, and distribution parameters inside hard limits.
+- Emergency authority pauses minting, settlement, collateral updates, buybacks, and vault operations.
 - Upgrade authority is held behind a higher-threshold multisig.
 
 Risk-reducing actions can happen quickly. Risk-increasing changes are operationally slower and bounded by the program.
 
 ## Demand Path
 
-AGC is not just another borrow asset. Demand comes from scarce access to monetary capacity and from ownership of a system that can grow when its balance sheet improves.
+AGC demand comes from useful credit inventory and ownership of the expansion layer.
 
-- Users buy AGC because they expect reserve and credit capacity to grow.
-- Agents use AGC as working capital.
+- Holders buy AGC because they expect credit capacity to grow.
+- Agents and applications use AGC as working capital.
+- Borrowers and agents can use AGC or xAGC ownership as a signal for better credit access.
 - xAGC holders receive most expansion flow and later protocol revenue.
-- Underwriters can back credit pools for spread with real first-loss risk.
+- Underwriters back credit pools and earn spread for taking real first-loss risk.
 - BTC reserve appreciation can increase risk-weighted expansion capacity.
 
 The loop:
@@ -118,11 +118,11 @@ Good mechanics:
 - credit access tiers
 - underwriter tranches
 - BTC reserve upside
-- repaid-credit mining
+- repaid-credit rewards
 
-Bad mechanics:
+Mechanics AGC rejects:
 
-- emissions-only APY
+- inflation marketed as yield
 - minting because price pumped
 - unbounded rebases
 - fake buybacks
@@ -131,7 +131,7 @@ Bad mechanics:
 
 ## Solana Architecture
 
-Solana public pools can be traded through Jupiter, Phantom, wallets, and bots. Therefore, optional adapter flow cannot be treated as complete global demand.
+Solana public pools can be traded through Jupiter, Phantom, wallets, and bots. Optional adapter flow cannot be treated as complete global demand.
 
 Under the hood, AGC does the following:
 

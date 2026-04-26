@@ -1,11 +1,11 @@
 # Agent Credit Protocol
 
-Agent Credit Protocol is a pre-launch implementation of reserve-efficient onchain credit for autonomous markets.
+Agent Credit Protocol is a Solana-native credit machine for autonomous markets. AGC is liquid credit inventory; xAGC owns the long-duration expansion layer.
 
-The system is built around three assets:
+The system is built around a reserve and credit asset set:
 
-- `AGC`: the liquid credit asset agents hold as working capital
-- `xAGC`: the non-rebasing savings share that captures most expansion
+- `AGC`: liquid credit inventory agents, apps, borrowers, and users hold as working capital
+- `xAGC`: the non-rebasing expansion share that captures most expansion
 - `USDC` / `USDT`: defensive stablecoin reserve and settlement assets
 - BTC wrappers: strategic reserve collateral with haircuts
 - RWAs / tokenized stocks: later isolated collateral candidates
@@ -31,11 +31,11 @@ AGC demand rises
 - [`/Users/nate/Desktop/agc/solana/README.md`](/Users/nate/Desktop/agc/solana/README.md)
   Solana program build, account, governance, and hardening notes.
 - [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web)
-  Solana product site, operator dashboard, hosted docs, and AI-readable docs.
+  Solana product site, AGC console, hosted docs, and AI-readable docs.
 
 ## Policy Model
 
-The controller evaluates epochs using generic market observables rather than route-specific payment labels:
+The controller evaluates epochs using market and balance-sheet observables rather than route-specific payment labels:
 
 - premium over anchor
 - premium persistence
@@ -65,7 +65,7 @@ There are no negative rebases in the normal path.
 
 ## Website
 
-The dashboard in [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web) is the Solana operator surface for:
+The AGC console in [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web) is the Solana user surface for:
 
 - AGC market entry through Jupiter
 - xAGC deposits and redemptions

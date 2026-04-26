@@ -10,9 +10,9 @@ const docsHref = "/docs";
 
 const dashboardNavItems = [
   { label: "Landing", href: "/" },
-  { label: "Telemetry", href: "#telemetry" },
-  { label: "Market", href: "#market-desk" },
-  { label: "Policy", href: "#policy" },
+  { label: "State", href: "#telemetry" },
+  { label: "Use AGC", href: "#market-desk" },
+  { label: "Expansion", href: "#policy" },
   { label: "Docs", href: docsHref },
 ] as const;
 
@@ -26,11 +26,11 @@ const landingSections = [
     playbackRate: 1,
     poster: "/art-deco/statue_city_poster.jpg",
     eyebrow: "Agent Credit Protocol",
-    title: "Credit for the autonomous economy.",
+    title: "Credit inventory for machine economies.",
     text:
-      "AGC is a new credit asset for agents, apps, and automated markets: liquid enough to move at internet speed, scarce enough to matter, and built to grow with the economy around it.",
+      "AGC is spendable working capital for agents, apps, and automated markets. It moves like a token, expands like credit, and only grows when the balance sheet earns it.",
     align: "left",
-    stats: ["Agent money", "Onchain credit", "Solana native"],
+    stats: ["Machine capital", "Earned expansion", "Solana native"],
     docsId: "overview",
   },
   {
@@ -42,11 +42,11 @@ const landingSections = [
     playbackRate: 1.5,
     poster: "/art-deco/city_orbit_poster.jpg",
     eyebrow: "The problem",
-    title: "Autonomous markets need more than static cash.",
+    title: "Static dollars cannot power a live machine economy.",
     text:
-      "Agents will need balances for compute, APIs, data, inventory, execution, and commerce. Fully reserved dollars are useful, but they do not create the credit velocity a native machine economy can use.",
+      "Agents need balances for compute, APIs, data, inventory, execution, and commerce. Fully reserved stablecoins settle payments, but they do not create native credit velocity.",
     align: "right",
-    stats: ["Working capital", "Real-time settlement", "Credit velocity"],
+    stats: ["Working capital", "Real-time spend", "Credit velocity"],
     docsId: "problem",
   },
   {
@@ -58,11 +58,11 @@ const landingSections = [
     playbackRate: 0.8,
     poster: "/art-deco/statue_orbit_poster.jpg",
     eyebrow: "Upside",
-    title: "Own the expansion layer before it gets crowded.",
+    title: "Own the credit machine before it gets crowded.",
     text:
-      "If AGC becomes useful credit inventory, demand can deepen reserves, expand capacity, and route value into xAGC. The early bet is not yield farming. It is exposure to a growing monetary network.",
+      "If AGC becomes useful credit inventory, demand deepens reserves, unlocks capacity, and routes value into xAGC. The early bet is ownership of a credit network that expands when the balance sheet earns it.",
     align: "left",
-    stats: ["xAGC upside", "BTC reserve beta", "Credit access"],
+    stats: ["xAGC expansion", "BTC reserve beta", "Credit access"],
     docsId: "growth",
   },
 ] as const;
@@ -424,7 +424,7 @@ function LandingPage() {
             {index === 0 ? (
               <div className="landing-actions">
                 <a className="landing-button landing-button-primary" href="/dashboard">
-                  Open Dashboard
+                  Open AGC Console
                 </a>
                 <a className="landing-button" href={`${docsHref}/${section.docsId}`}>
                   Read Docs
@@ -466,14 +466,14 @@ function LandingPage() {
         <div className="cinema-vignette" aria-hidden="true" />
         <div className="footer-cinema-content">
           <p className="landing-eyebrow">Why it matters</p>
-          <h2>Built for upside, constrained so the game cannot be casually rugged.</h2>
+          <h2>Expansion with proof, not inflation with a story.</h2>
           <p>
-            Expansion is bounded by reserves, collateral, liquidity, oracle
-            health, and mint caps. Governance is split across admin, risk, and
-            emergency roles so growth and defense remain decentralized.
+            AGC prints only when reserves, collateral, liquidity, oracle health,
+            and mint caps line up. Governance can tune the machine, but it
+            cannot turn it into an unlimited faucet.
           </p>
           <div className="footer-link-row">
-            <a href="/dashboard">Dashboard</a>
+            <a href="/dashboard">AGC Console</a>
             <a href={`${docsHref}/defense`}>Safety Docs</a>
             <a href={`${docsHref}/governance`}>Governance Docs</a>
             <a href="https://x.com">X</a>
@@ -523,6 +523,75 @@ function activeDocFromPath() {
   return flatProtocolDocs.find((page) => page.id === pageId) ?? flatProtocolDocs[0];
 }
 
+function normalizedAppPath() {
+  if (typeof window === "undefined") return "";
+  return window.location.pathname.replace(/\/$/, "");
+}
+
+function isAppRoute(pathname: string) {
+  return pathname === "/" || pathname === "/dashboard" || pathname === "/docs" || pathname.startsWith("/docs/");
+}
+
+function scrollToHash(hash: string) {
+  if (!hash) {
+    window.scrollTo(0, 0);
+    return;
+  }
+
+  const targetId = decodeURIComponent(hash.slice(1));
+  window.setTimeout(() => {
+    document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+  }, 0);
+}
+
+function useClientRoutePath() {
+  const [path, setPath] = useState(normalizedAppPath);
+
+  useEffect(() => {
+    function syncPath() {
+      setPath(normalizedAppPath());
+    }
+
+    function handleClick(event: globalThis.MouseEvent) {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin || !isAppRoute(url.pathname)) return;
+
+      if (url.pathname === window.location.pathname && url.search === window.location.search) {
+        return;
+      }
+
+      event.preventDefault();
+      window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      syncPath();
+      scrollToHash(url.hash);
+    }
+
+    window.addEventListener("popstate", syncPath);
+    document.addEventListener("click", handleClick);
+    return () => {
+      window.removeEventListener("popstate", syncPath);
+      document.removeEventListener("click", handleClick);
+    };
+  }, []);
+
+  return path;
+}
+
 function DocVisual({ page }: { page: (typeof flatProtocolDocs)[number] }) {
   const visual = docVisuals[page.visual];
 
@@ -566,7 +635,7 @@ function DocsPage() {
         <nav className="nav" aria-label="Docs navigation" />
         <div className="wallet">
           <a className="button button-secondary" href="/dashboard">
-            Dashboard
+            AGC Console
           </a>
         </div>
       </header>
@@ -809,7 +878,7 @@ function DashboardPage() {
     }
     setTxStatus(status);
     setTxNote(
-      "This panel is pointed at the Solana program surface. Live transaction submission activates after the deployed IDL client is configured.",
+      "Live Solana transactions activate after the deployed IDL client is configured.",
     );
   }
 
@@ -877,7 +946,7 @@ function DashboardPage() {
           </span>
         </a>
 
-        <nav className="nav" aria-label="Dashboard navigation">
+        <nav className="nav" aria-label="AGC console navigation">
           {dashboardNavItems.map((item) => (
             <a key={item.label} href={item.href}>
               {item.label}
@@ -905,15 +974,15 @@ function DashboardPage() {
       </header>
 
       <section className="dashboard-hero">
-        <p className="eyebrow">Operator dashboard</p>
-        <h1>Protocol telemetry and market controls.</h1>
+        <p className="eyebrow">AGC console</p>
+        <h1>Credit inventory, expansion state, and xAGC duration.</h1>
         <p>
-          Monitor AGC policy state, trade inventory, and manage xAGC duration
-          from one operating surface.
+          Trade AGC, lock into the expansion layer, underwrite credit, and watch
+          the balance sheet decide when new supply is earned.
         </p>
       </section>
 
-      <section id="telemetry" className="telemetry-band dashboard-telemetry" aria-label="Protocol telemetry">
+      <section id="telemetry" className="telemetry-band dashboard-telemetry" aria-label="AGC state">
         {telemetry.map((metric) => (
           <article key={metric.label} className="telemetry-item">
             <span className="metric-label">{metric.label}</span>
@@ -935,8 +1004,8 @@ function DashboardPage() {
 
       <section id="market-desk" className="section console-section">
         <div className="section-heading console-heading">
-          <p className="eyebrow">Operator console</p>
-          <h2>Trade inventory, lock duration, and policy state.</h2>
+          <p className="eyebrow">Use AGC</p>
+          <h2>Trade, lock, borrow, and underwrite in one place.</h2>
         </div>
 
         <div className="market-console">
@@ -952,7 +1021,7 @@ function DashboardPage() {
             <article id="vaults" className="operation-panel">
               <div className="panel-header">
                 <span className="card-label">Savings layer</span>
-                <h3>xAGC vault</h3>
+                <h3>xAGC expansion layer</h3>
               </div>
               <div className="field-pair">
                 <Field
@@ -974,7 +1043,7 @@ function DashboardPage() {
                 <span>Wallet: <strong>{shortKey(walletAddress)}</strong></span>
                 <span>AGC mint: <strong>{shortKey(solanaAddresses.agcMint)}</strong></span>
                 <span>xAGC mint: <strong>{shortKey(solanaAddresses.xagcMint)}</strong></span>
-                <span>Vault: <strong>{shortKey(solanaAddresses.xagcVaultAgc)}</strong></span>
+                <span>Reserve: <strong>{shortKey(solanaAddresses.xagcVaultAgc)}</strong></span>
                 <span>Share px: <strong>On-chain</strong></span>
                 <span>Exit fee: <strong>Policy state</strong></span>
                 <span>Deposit: <strong>{stakeAgcAmount || " - "} AGC</strong></span>
@@ -1001,7 +1070,7 @@ function DashboardPage() {
             <article className="operation-panel credit-panel">
               <div className="panel-header">
                 <span className="card-label">Credit facility</span>
-                <h3>Borrow and underwrite</h3>
+                <h3>Borrow and back credit</h3>
               </div>
               <div className="field-pair">
                 <Field
@@ -1037,7 +1106,7 @@ function DashboardPage() {
                 <span>Facility: <strong>Per collateral mint</strong></span>
                 <span>Collateral: <strong>USDC / USDT / BTC / isolated RWA</strong></span>
                 <span>Health: <strong>Collateral value / AGC debt</strong></span>
-                <span>Reserve: <strong>Underwriter first loss</strong></span>
+                <span>Backstop: <strong>Underwriter first loss</strong></span>
                 <span>Interest: <strong>Paid to underwriters</strong></span>
                 <span>Default: <strong>Burn reserve, route collateral</strong></span>
               </div>
@@ -1083,11 +1152,11 @@ function DashboardPage() {
           <img src="/art-deco/policy-engine.png" alt="" />
         </div>
         <div className="policy-copy">
-          <p className="eyebrow">Policy chamber</p>
-          <h2>Expansion stays tied to the balance sheet.</h2>
+          <p className="eyebrow">Expansion control</p>
+          <h2>The machine grows only when the balance sheet proves it.</h2>
           <p>
-            AGC can grow when reserves, liquidity, oracle health, and long-term
-            demand are strong. When conditions weaken, issuance stops and
+            Reserves, collateral, liquidity, oracle health, and credit quality
+            decide capacity. When those signals weaken, issuance stops and
             defense takes priority.
           </p>
           <div className="metric-table">
@@ -1102,7 +1171,7 @@ function DashboardPage() {
       </section>
 
       <footer className="footer">
-        <span>AGC / Jupiter market / policy engine / xAGC vault / credit facilities</span>
+        <span>AGC / Jupiter market / expansion control / xAGC vault / credit facilities</span>
         <span>Program: {shortKey(solanaAddresses.programId)}</span>
       </footer>
     </main>
@@ -1110,8 +1179,7 @@ function DashboardPage() {
 }
 
 export default function App() {
-  const path =
-    typeof window !== "undefined" ? window.location.pathname.replace(/\/$/, "") : "";
+  const path = useClientRoutePath();
   const isDashboard = path === "/dashboard";
   const isDocs = path === "/docs" || path.startsWith("/docs/");
 

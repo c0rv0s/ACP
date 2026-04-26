@@ -34,5 +34,5 @@ This file tracks the remaining work to move the Solana protocol from current imp
 - [ ] Complete an external Solana security review.
 - [ ] Run adversarial tests for stale oracle data, wrong mint accounts, underwriter reserve drain, overdraw attempts, and collateral seizure routing.
 - [ ] Publish deployed program ID, IDL, mint addresses, treasury addresses, and multisig addresses.
-- [ ] Run a staged devnet launch before mainnet.
+- [ ] Run a staged devnet launch before production deployment.
 - [ ] Define operational monitoring for policy settlement, oracle freshness, reserve balances, credit health, and emergency pause events.
