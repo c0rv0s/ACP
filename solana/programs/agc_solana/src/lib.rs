@@ -658,19 +658,7 @@ pub mod agc_solana {
             AgcError::Paused
         );
         require!(amount > 0, AgcError::ZeroAmount);
-        require_credit_line_active(&ctx.accounts.credit_line)?;
-
-        let now = current_timestamp()?;
-        accrue_facility_line_interest(
-            &mut ctx.accounts.credit_line,
-            &mut ctx.accounts.facility,
-            now,
-        )?;
-        validate_oracle_fresh(
-            &ctx.accounts.collateral_asset,
-            &ctx.accounts.collateral_oracle,
-            now,
-        )?;
+        require_credit_line_allows_collateral_withdrawal(&ctx.accounts.credit_line)?;
 
         let remaining_collateral = ctx
             .accounts
@@ -678,15 +666,31 @@ pub mod agc_solana {
             .collateral_amount
             .checked_sub(amount)
             .ok_or(AgcError::InsufficientCollateral)?;
-        validate_credit_line_health(
-            &ctx.accounts.credit_line,
-            &ctx.accounts.facility,
-            &ctx.accounts.collateral_oracle,
-            remaining_collateral,
-            ctx.accounts.state.anchor_price_x18,
-            ctx.accounts.state.agc_unit as u128,
-            ctx.accounts.facility.config.min_collateral_health_bps,
-        )?;
+
+        if ctx.accounts.credit_line.status == CreditLineStatus::Active {
+            let now = current_timestamp()?;
+            accrue_facility_line_interest(
+                &mut ctx.accounts.credit_line,
+                &mut ctx.accounts.facility,
+                now,
+            )?;
+            if collateral_withdrawal_needs_health_check(&ctx.accounts.credit_line)? {
+                validate_oracle_fresh(
+                    &ctx.accounts.collateral_asset,
+                    &ctx.accounts.collateral_oracle,
+                    now,
+                )?;
+                validate_credit_line_health(
+                    &ctx.accounts.credit_line,
+                    &ctx.accounts.facility,
+                    &ctx.accounts.collateral_oracle,
+                    remaining_collateral,
+                    ctx.accounts.state.anchor_price_x18,
+                    ctx.accounts.state.agc_unit as u128,
+                    ctx.accounts.facility.config.min_collateral_health_bps,
+                )?;
+            }
+        }
 
         transfer_from_credit_facility_vault(
             &ctx.accounts.facility,
@@ -948,30 +952,15 @@ pub mod agc_solana {
             &mut ctx.accounts.facility,
             now,
         )?;
-        validate_oracle_fresh(
+        validate_credit_line_defaultable(
+            &ctx.accounts.credit_line,
+            &ctx.accounts.facility,
             &ctx.accounts.collateral_asset,
             &ctx.accounts.collateral_oracle,
             now,
-        )?;
-
-        let health_bps = credit_line_health_bps(
-            &ctx.accounts.credit_line,
-            &ctx.accounts.facility,
-            &ctx.accounts.collateral_oracle,
-            ctx.accounts.credit_line.collateral_amount,
             ctx.accounts.state.anchor_price_x18,
             ctx.accounts.state.agc_unit as u128,
         )?;
-        let matured = now
-            > ctx
-                .accounts
-                .credit_line
-                .maturity_timestamp
-                .saturating_add(ctx.accounts.facility.config.default_grace_seconds);
-        require!(
-            matured || health_bps < ctx.accounts.facility.config.liquidation_health_bps as u128,
-            AgcError::CreditLineHealthy
-        );
 
         let defaulted_debt = credit_line_total_debt_agc(&ctx.accounts.credit_line)?;
         let underwriter_loss = defaulted_debt.min(ctx.accounts.underwriter_vault_agc.amount);
@@ -3242,6 +3231,29 @@ fn require_credit_line_open_for_repayment(credit_line: &CreditLine) -> Result<()
     require_credit_line_active(credit_line)
 }
 
+fn require_credit_line_allows_collateral_withdrawal(credit_line: &CreditLine) -> Result<()> {
+    require!(
+        matches!(
+            credit_line.status,
+            CreditLineStatus::Active | CreditLineStatus::Repaid
+        ),
+        AgcError::CreditLineInactive
+    );
+    Ok(())
+}
+
+fn collateral_withdrawal_needs_health_check(credit_line: &CreditLine) -> Result<bool> {
+    require_credit_line_allows_collateral_withdrawal(credit_line)?;
+    if credit_line.status == CreditLineStatus::Repaid {
+        require!(
+            credit_line_total_debt_agc(credit_line)? == 0,
+            AgcError::CreditLineInactive
+        );
+        return Ok(false);
+    }
+    Ok(credit_line_total_debt_agc(credit_line)? > 0)
+}
+
 fn validate_oracle_fresh(
     collateral_asset: &CollateralAsset,
     collateral_oracle: &CollateralOracle,
@@ -3269,6 +3281,45 @@ fn validate_oracle_fresh(
         now.saturating_sub(collateral_oracle.updated_at)
             <= collateral_asset.max_oracle_staleness_seconds,
         AgcError::InvalidOraclePrice
+    );
+    Ok(())
+}
+
+fn credit_line_past_default_grace(
+    credit_line: &CreditLine,
+    facility: &CreditFacility,
+    now: u64,
+) -> bool {
+    now > credit_line
+        .maturity_timestamp
+        .saturating_add(facility.config.default_grace_seconds)
+}
+
+fn validate_credit_line_defaultable(
+    credit_line: &CreditLine,
+    facility: &CreditFacility,
+    collateral_asset: &CollateralAsset,
+    collateral_oracle: &CollateralOracle,
+    now: u64,
+    anchor_price_x18: u128,
+    agc_unit: u128,
+) -> Result<()> {
+    if credit_line_past_default_grace(credit_line, facility, now) {
+        return Ok(());
+    }
+
+    validate_oracle_fresh(collateral_asset, collateral_oracle, now)?;
+    let health_bps = credit_line_health_bps(
+        credit_line,
+        facility,
+        collateral_oracle,
+        credit_line.collateral_amount,
+        anchor_price_x18,
+        agc_unit,
+    )?;
+    require!(
+        health_bps < facility.config.liquidation_health_bps as u128,
+        AgcError::CreditLineHealthy
     );
     Ok(())
 }
@@ -5252,6 +5303,65 @@ mod tests {
     }
 
     #[test]
+    fn credit_draw_rejects_disabled_collateral_and_debt_cap_breaches() {
+        let mut asset = credit_collateral_asset();
+        let oracle = credit_oracle(&asset, 100);
+        let mut facility = credit_facility(&asset);
+        let mut line = credit_line(Pubkey::new_unique());
+
+        asset.enabled = false;
+        assert!(validate_credit_draw(
+            &line,
+            &facility,
+            &asset,
+            &oracle,
+            1,
+            100 * 1_000_000_000,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+
+        asset.enabled = true;
+        line.principal_debt_agc = line.credit_limit_agc - 1;
+        assert!(validate_credit_draw(
+            &line,
+            &facility,
+            &asset,
+            &oracle,
+            2,
+            100 * 1_000_000_000,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+
+        line = credit_line(Pubkey::new_unique());
+        facility.total_principal_debt_agc = facility.config.max_total_debt_agc - 1;
+        assert!(validate_credit_draw(
+            &line,
+            &facility,
+            &asset,
+            &oracle,
+            2,
+            100_000 * 1_000_000_000,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn underwriter_withdrawal_cannot_breach_required_reserve() {
+        let asset = credit_collateral_asset();
+        let mut facility = credit_facility(&asset);
+        facility.total_principal_debt_agc = 1_000 * 1_000_000_000;
+
+        assert!(validate_underwriter_reserve(&facility, 100 * 1_000_000_000).is_ok());
+        assert!(validate_underwriter_reserve(&facility, 100 * 1_000_000_000 - 1).is_err());
+    }
+
+    #[test]
     fn credit_interest_accrues_to_facility_accounting() {
         let asset = credit_collateral_asset();
         let mut facility = credit_facility(&asset);
@@ -5274,6 +5384,100 @@ mod tests {
 
         let stale_oracle = credit_oracle(&asset, 1);
         assert!(validate_oracle_fresh(&asset, &stale_oracle, 200).is_err());
+    }
+
+    #[test]
+    fn repaid_credit_lines_can_withdraw_collateral_without_oracle_health_check() {
+        let mut line = credit_line(Pubkey::new_unique());
+        line.status = CreditLineStatus::Repaid;
+        line.principal_debt_agc = 0;
+        line.accrued_interest_agc = 0;
+        assert!(require_credit_line_allows_collateral_withdrawal(&line).is_ok());
+        assert!(!collateral_withdrawal_needs_health_check(&line).unwrap());
+
+        line.status = CreditLineStatus::Active;
+        assert!(!collateral_withdrawal_needs_health_check(&line).unwrap());
+
+        line.principal_debt_agc = 1;
+        assert!(collateral_withdrawal_needs_health_check(&line).unwrap());
+
+        line.status = CreditLineStatus::Repaid;
+        assert!(collateral_withdrawal_needs_health_check(&line).is_err());
+
+        line.status = CreditLineStatus::Defaulted;
+        line.principal_debt_agc = 0;
+        assert!(require_credit_line_allows_collateral_withdrawal(&line).is_err());
+    }
+
+    #[test]
+    fn matured_default_does_not_require_fresh_oracle() {
+        let asset = credit_collateral_asset();
+        let facility = credit_facility(&asset);
+        let mut line = credit_line(Pubkey::new_unique());
+        line.principal_debt_agc = 1_000 * 1_000_000_000;
+        line.maturity_timestamp = 1_000;
+
+        let now_after_grace = line
+            .maturity_timestamp
+            .saturating_add(facility.config.default_grace_seconds)
+            .saturating_add(1);
+        let stale_oracle = credit_oracle(&asset, 1);
+        assert!(validate_oracle_fresh(&asset, &stale_oracle, now_after_grace).is_err());
+        assert!(validate_credit_line_defaultable(
+            &line,
+            &facility,
+            &asset,
+            &stale_oracle,
+            now_after_grace,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn immature_default_requires_bad_health_and_fresh_oracle() {
+        let asset = credit_collateral_asset();
+        let facility = credit_facility(&asset);
+        let mut line = credit_line(Pubkey::new_unique());
+        line.principal_debt_agc = 1_000 * 1_000_000_000;
+        line.maturity_timestamp = 10 * SECONDS_PER_DAY;
+
+        let stale_oracle = credit_oracle(&asset, 1);
+        assert!(validate_credit_line_defaultable(
+            &line,
+            &facility,
+            &asset,
+            &stale_oracle,
+            200,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+
+        let fresh_oracle = credit_oracle(&asset, 200);
+        assert!(validate_credit_line_defaultable(
+            &line,
+            &facility,
+            &asset,
+            &fresh_oracle,
+            200,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+
+        line.principal_debt_agc = 2_000 * 1_000_000_000;
+        assert!(validate_credit_line_defaultable(
+            &line,
+            &facility,
+            &asset,
+            &fresh_oracle,
+            200,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_ok());
     }
 
     #[test]
@@ -5339,6 +5543,58 @@ mod tests {
         )
         .unwrap();
         assert_eq!(oracle_result.regime, Regime::Defense);
+    }
+
+    #[test]
+    fn reserve_concentration_blocks_expansion_even_with_hot_demand() {
+        let snapshot = EpochSnapshot {
+            epoch_id: 10,
+            started_at: 0,
+            ended_at: 3_600,
+            gross_buy_volume_quote_x18: 100_000 * PRICE_SCALE,
+            gross_sell_volume_quote_x18: 10_000 * PRICE_SCALE,
+            total_volume_quote_x18: 110_000 * PRICE_SCALE,
+            short_twap_price_x18: PRICE_SCALE * 104 / 100,
+            realized_volatility_bps: 50,
+            total_hook_fees_quote_x18: 0,
+            total_hook_fees_agc: 0,
+        };
+        let state = PolicyState {
+            anchor_price_x18: PRICE_SCALE,
+            premium_persistence_epochs: 1,
+            last_gross_buy_quote_x18: 50_000 * PRICE_SCALE,
+            minted_today_acp: 0,
+            last_regime: Regime::Neutral,
+            recovery_cooldown_epochs_remaining: 0,
+            float_supply_acp: 1_000_000_000_000_000,
+            treasury_quote_x18: 200_000 * PRICE_SCALE,
+            treasury_acp: 0,
+            xagc_total_assets_acp: 250_000_000_000_000,
+        };
+        let flows = VaultFlows {
+            xagc_deposits_acp: 20_000_000_000_000,
+            xagc_gross_redemptions_acp: 0,
+        };
+        let mut concentrated = metrics(
+            250_000 * PRICE_SCALE,
+            650_000 * PRICE_SCALE,
+            600_000 * PRICE_SCALE,
+        );
+        concentrated.largest_collateral_concentration_bps =
+            params().max_reserve_concentration_bps + 1;
+
+        let result = evaluate_epoch(
+            snapshot,
+            concentrated,
+            state,
+            flows,
+            params(),
+            1_000_000_000,
+        )
+        .unwrap();
+
+        assert_ne!(result.regime, Regime::Expansion);
+        assert_eq!(result.mint_budget_acp, 0);
     }
 
     #[test]
