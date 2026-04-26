@@ -14,9 +14,18 @@ const XAGC_AUTHORITY_SEED: &[u8] = b"xagc-authority";
 const TREASURY_AGC_SEED: &[u8] = b"treasury-agc";
 const TREASURY_USDC_SEED: &[u8] = b"treasury-usdc";
 const XAGC_VAULT_AGC_SEED: &[u8] = b"xagc-vault-agc";
+const COLLATERAL_ASSET_SEED: &[u8] = b"collateral-asset";
+const COLLATERAL_ORACLE_SEED: &[u8] = b"collateral-oracle";
+const CREDIT_FACILITY_SEED: &[u8] = b"credit-facility";
+const CREDIT_FACILITY_AUTHORITY_SEED: &[u8] = b"credit-facility-authority";
+const CREDIT_COLLATERAL_VAULT_SEED: &[u8] = b"credit-collateral-vault";
+const UNDERWRITER_VAULT_SEED: &[u8] = b"underwriter-vault";
+const UNDERWRITER_POSITION_SEED: &[u8] = b"underwriter-position";
+const CREDIT_LINE_SEED: &[u8] = b"credit-line";
 
 const BPS: u128 = 10_000;
 const SECONDS_PER_DAY: u64 = 86_400;
+const SECONDS_PER_YEAR: u128 = 31_536_000;
 
 #[program]
 pub mod agc_solana {
@@ -56,6 +65,8 @@ pub mod agc_solana {
         let state = &mut ctx.accounts.state;
         state.admin = ctx.accounts.admin.key();
         state.pending_admin = Pubkey::default();
+        state.risk_admin = ctx.accounts.admin.key();
+        state.emergency_admin = ctx.accounts.admin.key();
         state.agc_mint = ctx.accounts.agc_mint.key();
         state.xagc_mint = ctx.accounts.xagc_mint.key();
         state.usdc_mint = ctx.accounts.usdc_mint.key();
@@ -86,6 +97,13 @@ pub mod agc_solana {
         state.mint_distribution = args.mint_distribution;
         state.regime = Regime::Neutral;
         state.anchor_price_x18 = args.initial_anchor_price_x18;
+        state.protocol_version = 2;
+        state.credit_facility_count = 0;
+        state.credit_principal_outstanding_agc = 0;
+        state.credit_drawn_agc = 0;
+        state.credit_repaid_agc = 0;
+        state.credit_interest_paid_agc = 0;
+        state.credit_defaulted_agc = 0;
         state.accumulator = EpochAccumulator {
             epoch_id: 1,
             started_at: now,
@@ -174,12 +192,26 @@ pub mod agc_solana {
     }
 
     pub fn set_pause_flags(ctx: Context<SetPauseFlags>, pause_flags: PauseFlags) -> Result<()> {
+        assert_emergency_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         ctx.accounts.state.pause_flags = pause_flags;
         emit!(PauseFlagsUpdated { pause_flags });
         Ok(())
     }
 
+    pub fn set_governance_authorities(
+        ctx: Context<SetGovernanceAuthorities>,
+        authorities: GovernanceAuthorities,
+    ) -> Result<()> {
+        validate_governance_authorities(authorities)?;
+        let state = &mut ctx.accounts.state;
+        state.risk_admin = authorities.risk_admin;
+        state.emergency_admin = authorities.emergency_admin;
+        emit!(GovernanceAuthoritiesUpdated { authorities });
+        Ok(())
+    }
+
     pub fn set_policy_params(ctx: Context<SetPolicyParams>, params: PolicyParams) -> Result<()> {
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         validate_policy_params(params)?;
         ctx.accounts.state.policy_params = params;
         emit!(PolicyParametersUpdated {
@@ -194,6 +226,7 @@ pub mod agc_solana {
         ctx: Context<SetMintDistribution>,
         distribution: MintDistribution,
     ) -> Result<()> {
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         validate_distribution(distribution)?;
         ctx.accounts.state.mint_distribution = distribution;
         emit!(MintDistributionUpdated { distribution });
@@ -204,6 +237,7 @@ pub mod agc_solana {
         ctx: Context<SetSettlementRecipients>,
         recipients: SettlementRecipients,
     ) -> Result<()> {
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         let state = &mut ctx.accounts.state;
         state.growth_programs_agc = recipients.growth_programs_agc;
         state.lp_agc = recipients.lp_agc;
@@ -216,15 +250,849 @@ pub mod agc_solana {
         ctx: Context<SetGrowthProgramsEnabled>,
         enabled: bool,
     ) -> Result<()> {
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         ctx.accounts.state.growth_programs_enabled = enabled;
         emit!(GrowthProgramsEnabledUpdated { enabled });
         Ok(())
     }
 
     pub fn set_exit_fee_bps(ctx: Context<SetExitFeeBps>, exit_fee_bps: u16) -> Result<()> {
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
         require!(exit_fee_bps < BPS as u16, AgcError::InvalidFee);
         ctx.accounts.state.exit_fee_bps = exit_fee_bps;
         emit!(ExitFeeUpdated { exit_fee_bps });
+        Ok(())
+    }
+
+    pub fn set_collateral_asset(
+        ctx: Context<SetCollateralAsset>,
+        config: CollateralAssetConfig,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.collateral_updates_paused || !config.enabled,
+            AgcError::Paused
+        );
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
+        validate_collateral_asset_config(config)?;
+
+        let collateral_asset = &mut ctx.accounts.collateral_asset;
+        collateral_asset.mint = ctx.accounts.mint.key();
+        collateral_asset.mint_decimals = ctx.accounts.mint.decimals;
+        collateral_asset.oracle_feed = config.oracle_feed;
+        collateral_asset.reserve_token_account = config.reserve_token_account;
+        collateral_asset.asset_class = config.asset_class;
+        collateral_asset.reserve_weight_bps = config.reserve_weight_bps;
+        collateral_asset.collateral_factor_bps = config.collateral_factor_bps;
+        collateral_asset.liquidation_threshold_bps = config.liquidation_threshold_bps;
+        collateral_asset.max_concentration_bps = config.max_concentration_bps;
+        collateral_asset.max_oracle_staleness_seconds = config.max_oracle_staleness_seconds;
+        collateral_asset.max_oracle_confidence_bps = config.max_oracle_confidence_bps;
+        collateral_asset.enabled = config.enabled;
+        collateral_asset.bump = ctx.bumps.collateral_asset;
+
+        emit!(CollateralAssetUpdated {
+            mint: collateral_asset.mint,
+            config,
+        });
+
+        Ok(())
+    }
+
+    pub fn set_collateral_oracle_price(
+        ctx: Context<SetCollateralOraclePrice>,
+        price: CollateralOraclePriceInput,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.collateral_updates_paused,
+            AgcError::Paused
+        );
+        assert_oracle_reporter_or_admin(
+            &ctx.accounts.state,
+            ctx.accounts.authority.key(),
+            ctx.accounts.keeper.to_account_info(),
+        )?;
+        require!(price.price_quote_x18 > 0, AgcError::InvalidPrice);
+        require!(
+            price.confidence_bps <= ctx.accounts.collateral_asset.max_oracle_confidence_bps,
+            AgcError::InvalidOraclePrice
+        );
+
+        let oracle = &mut ctx.accounts.collateral_oracle;
+        oracle.mint = ctx.accounts.mint.key();
+        oracle.oracle_feed = ctx.accounts.collateral_asset.oracle_feed;
+        oracle.price_quote_x18 = price.price_quote_x18;
+        oracle.confidence_bps = price.confidence_bps;
+        oracle.updated_at = current_timestamp()?;
+        oracle.bump = ctx.bumps.collateral_oracle;
+
+        emit!(CollateralOraclePriceUpdated {
+            mint: oracle.mint,
+            price_quote_x18: oracle.price_quote_x18,
+            confidence_bps: oracle.confidence_bps,
+            updated_at: oracle.updated_at,
+        });
+
+        Ok(())
+    }
+
+    pub fn initialize_credit_facility(
+        ctx: Context<InitializeCreditFacility>,
+        facility_id: u64,
+        config: CreditFacilityConfig,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts
+                .state
+                .pause_flags
+                .credit_facility_updates_paused,
+            AgcError::Paused
+        );
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
+        require!(
+            ctx.accounts.collateral_asset.enabled,
+            AgcError::CollateralDisabled
+        );
+        require_keys_eq!(
+            ctx.accounts.collateral_asset.mint,
+            ctx.accounts.collateral_mint.key(),
+            AgcError::InvalidCollateralAssetConfig
+        );
+        validate_credit_facility_config(config, ctx.accounts.collateral_asset.asset_class)?;
+
+        let facility = &mut ctx.accounts.facility;
+        facility.facility_id = facility_id;
+        facility.collateral_mint = ctx.accounts.collateral_mint.key();
+        facility.collateral_asset = ctx.accounts.collateral_asset.key();
+        facility.collateral_vault = ctx.accounts.collateral_vault.key();
+        facility.underwriter_vault_agc = ctx.accounts.underwriter_vault_agc.key();
+        facility.collateral_decimals = ctx.accounts.collateral_mint.decimals;
+        facility.config = config;
+        facility.status = CreditFacilityStatus::Active;
+        facility.bump = ctx.bumps.facility;
+        facility.authority_bump = ctx.bumps.facility_authority;
+        facility.collateral_vault_bump = ctx.bumps.collateral_vault;
+        facility.underwriter_vault_bump = ctx.bumps.underwriter_vault_agc;
+        facility.created_at = current_timestamp()?;
+
+        let state = &mut ctx.accounts.state;
+        state.credit_facility_count = state
+            .credit_facility_count
+            .checked_add(1)
+            .ok_or(AgcError::MathOverflow)?;
+
+        emit!(CreditFacilityInitialized {
+            facility: facility.key(),
+            facility_id,
+            collateral_mint: facility.collateral_mint,
+            config,
+        });
+
+        Ok(())
+    }
+
+    pub fn set_credit_facility_config(
+        ctx: Context<SetCreditFacilityConfig>,
+        config: CreditFacilityConfig,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts
+                .state
+                .pause_flags
+                .credit_facility_updates_paused,
+            AgcError::Paused
+        );
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
+        validate_credit_facility_config(config, ctx.accounts.collateral_asset.asset_class)?;
+
+        ctx.accounts.facility.config = config;
+        ctx.accounts.facility.status = if config.enabled {
+            CreditFacilityStatus::Active
+        } else {
+            CreditFacilityStatus::Disabled
+        };
+
+        emit!(CreditFacilityConfigUpdated {
+            facility: ctx.accounts.facility.key(),
+            config,
+        });
+
+        Ok(())
+    }
+
+    pub fn deposit_underwriter_agc(ctx: Context<DepositUnderwriterAgc>, amount: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.underwriter_deposits_paused,
+            AgcError::Paused
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require_facility_active(&ctx.accounts.facility)?;
+
+        let shares = convert_to_shares(
+            amount,
+            ctx.accounts.facility.underwriter_total_shares,
+            ctx.accounts.underwriter_vault_agc.amount,
+            0,
+        )?;
+        require!(shares > 0, AgcError::ZeroAmount);
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.key(),
+                Transfer {
+                    from: ctx.accounts.underwriter_agc.to_account_info(),
+                    to: ctx.accounts.underwriter_vault_agc.to_account_info(),
+                    authority: ctx.accounts.underwriter.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        let facility = &mut ctx.accounts.facility;
+        facility.underwriter_total_shares = facility
+            .underwriter_total_shares
+            .checked_add(shares)
+            .ok_or(AgcError::MathOverflow)?;
+        facility.total_underwriter_deposits_agc = checked_add_u128(
+            facility.total_underwriter_deposits_agc,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        let position = &mut ctx.accounts.underwriter_position;
+        position.facility = facility.key();
+        position.underwriter = ctx.accounts.underwriter.key();
+        position.shares = position
+            .shares
+            .checked_add(shares)
+            .ok_or(AgcError::MathOverflow)?;
+        position.deposited_agc = checked_add_u128(
+            position.deposited_agc,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+        position.bump = ctx.bumps.underwriter_position;
+
+        emit!(UnderwriterAgcDeposited {
+            facility: facility.key(),
+            underwriter: position.underwriter,
+            amount,
+            shares,
+        });
+
+        Ok(())
+    }
+
+    pub fn withdraw_underwriter_agc(
+        ctx: Context<WithdrawUnderwriterAgc>,
+        shares: u64,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts
+                .state
+                .pause_flags
+                .underwriter_withdrawals_paused,
+            AgcError::Paused
+        );
+        require!(shares > 0, AgcError::ZeroAmount);
+        require!(
+            ctx.accounts.underwriter_position.shares >= shares,
+            AgcError::InsufficientShares
+        );
+
+        let assets = convert_to_assets(
+            shares,
+            ctx.accounts.facility.underwriter_total_shares,
+            ctx.accounts.underwriter_vault_agc.amount,
+            0,
+        )?;
+        require!(assets > 0, AgcError::ZeroAmount);
+
+        let remaining_underwriter_assets = ctx
+            .accounts
+            .underwriter_vault_agc
+            .amount
+            .checked_sub(assets)
+            .ok_or(AgcError::MathOverflow)?;
+        validate_underwriter_reserve(&ctx.accounts.facility, remaining_underwriter_assets)?;
+
+        transfer_from_credit_facility_vault(
+            &ctx.accounts.facility,
+            &ctx.accounts.underwriter_vault_agc,
+            &ctx.accounts.underwriter_agc_destination,
+            &ctx.accounts.facility_authority,
+            &ctx.accounts.token_program,
+            assets,
+        )?;
+
+        let facility = &mut ctx.accounts.facility;
+        facility.underwriter_total_shares = facility
+            .underwriter_total_shares
+            .checked_sub(shares)
+            .ok_or(AgcError::MathOverflow)?;
+        facility.total_underwriter_withdrawals_agc = checked_add_u128(
+            facility.total_underwriter_withdrawals_agc,
+            assets as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        let position = &mut ctx.accounts.underwriter_position;
+        position.shares = position
+            .shares
+            .checked_sub(shares)
+            .ok_or(AgcError::MathOverflow)?;
+        position.withdrawn_agc = checked_add_u128(
+            position.withdrawn_agc,
+            assets as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        emit!(UnderwriterAgcWithdrawn {
+            facility: facility.key(),
+            underwriter: position.underwriter,
+            assets,
+            shares,
+        });
+
+        Ok(())
+    }
+
+    pub fn open_credit_line(
+        ctx: Context<OpenCreditLine>,
+        line_id: u64,
+        args: OpenCreditLineArgs,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.credit_line_updates_paused,
+            AgcError::Paused
+        );
+        assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
+        require_facility_active(&ctx.accounts.facility)?;
+        validate_open_credit_line_args(args, &ctx.accounts.facility)?;
+
+        let now = current_timestamp()?;
+        require!(
+            args.maturity_timestamp > now,
+            AgcError::InvalidCreditLineConfig
+        );
+
+        let credit_line = &mut ctx.accounts.credit_line;
+        credit_line.facility = ctx.accounts.facility.key();
+        credit_line.borrower = ctx.accounts.borrower.key();
+        credit_line.line_id = line_id;
+        credit_line.credit_limit_agc = args.credit_limit_agc;
+        credit_line.maturity_timestamp = args.maturity_timestamp;
+        credit_line.status = CreditLineStatus::Active;
+        credit_line.opened_at = now;
+        credit_line.last_accrued_at = now;
+        credit_line.bump = ctx.bumps.credit_line;
+
+        ctx.accounts.facility.active_credit_lines = ctx
+            .accounts
+            .facility
+            .active_credit_lines
+            .checked_add(1)
+            .ok_or(AgcError::MathOverflow)?;
+
+        emit!(CreditLineOpened {
+            facility: credit_line.facility,
+            borrower: credit_line.borrower,
+            line_id,
+            credit_limit_agc: credit_line.credit_limit_agc,
+            maturity_timestamp: credit_line.maturity_timestamp,
+        });
+
+        Ok(())
+    }
+
+    pub fn deposit_credit_collateral(
+        ctx: Context<DepositCreditCollateral>,
+        amount: u64,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.credit_line_updates_paused,
+            AgcError::Paused
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require_credit_line_active(&ctx.accounts.credit_line)?;
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.key(),
+                Transfer {
+                    from: ctx.accounts.borrower_collateral.to_account_info(),
+                    to: ctx.accounts.collateral_vault.to_account_info(),
+                    authority: ctx.accounts.borrower.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        ctx.accounts.credit_line.collateral_amount = ctx
+            .accounts
+            .credit_line
+            .collateral_amount
+            .checked_add(amount)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.facility.total_collateral_deposited = checked_add_u128(
+            ctx.accounts.facility.total_collateral_deposited,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        emit!(CreditCollateralDeposited {
+            facility: ctx.accounts.facility.key(),
+            borrower: ctx.accounts.borrower.key(),
+            line: ctx.accounts.credit_line.key(),
+            amount,
+        });
+
+        Ok(())
+    }
+
+    pub fn withdraw_credit_collateral(
+        ctx: Context<WithdrawCreditCollateral>,
+        amount: u64,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.credit_line_updates_paused,
+            AgcError::Paused
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require_credit_line_active(&ctx.accounts.credit_line)?;
+
+        let now = current_timestamp()?;
+        accrue_facility_line_interest(
+            &mut ctx.accounts.credit_line,
+            &mut ctx.accounts.facility,
+            now,
+        )?;
+        validate_oracle_fresh(
+            &ctx.accounts.collateral_asset,
+            &ctx.accounts.collateral_oracle,
+            now,
+        )?;
+
+        let remaining_collateral = ctx
+            .accounts
+            .credit_line
+            .collateral_amount
+            .checked_sub(amount)
+            .ok_or(AgcError::InsufficientCollateral)?;
+        validate_credit_line_health(
+            &ctx.accounts.credit_line,
+            &ctx.accounts.facility,
+            &ctx.accounts.collateral_oracle,
+            remaining_collateral,
+            ctx.accounts.state.anchor_price_x18,
+            ctx.accounts.state.agc_unit as u128,
+            ctx.accounts.facility.config.min_collateral_health_bps,
+        )?;
+
+        transfer_from_credit_facility_vault(
+            &ctx.accounts.facility,
+            &ctx.accounts.collateral_vault,
+            &ctx.accounts.borrower_collateral_destination,
+            &ctx.accounts.facility_authority,
+            &ctx.accounts.token_program,
+            amount,
+        )?;
+
+        ctx.accounts.credit_line.collateral_amount = remaining_collateral;
+
+        emit!(CreditCollateralWithdrawn {
+            facility: ctx.accounts.facility.key(),
+            borrower: ctx.accounts.borrower.key(),
+            line: ctx.accounts.credit_line.key(),
+            amount,
+        });
+
+        Ok(())
+    }
+
+    pub fn draw_credit_line(ctx: Context<DrawCreditLine>, amount: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.credit_draws_paused,
+            AgcError::Paused
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require_facility_active(&ctx.accounts.facility)?;
+        require_credit_line_active(&ctx.accounts.credit_line)?;
+
+        let now = current_timestamp()?;
+        require!(
+            now <= ctx.accounts.credit_line.maturity_timestamp,
+            AgcError::CreditLineMatured
+        );
+        accrue_facility_line_interest(
+            &mut ctx.accounts.credit_line,
+            &mut ctx.accounts.facility,
+            now,
+        )?;
+        validate_oracle_fresh(
+            &ctx.accounts.collateral_asset,
+            &ctx.accounts.collateral_oracle,
+            now,
+        )?;
+        let accounted_underwriter_assets =
+            accounted_underwriter_assets_agc(&ctx.accounts.facility)?;
+
+        validate_credit_draw(
+            &ctx.accounts.credit_line,
+            &ctx.accounts.facility,
+            &ctx.accounts.collateral_asset,
+            &ctx.accounts.collateral_oracle,
+            amount,
+            accounted_underwriter_assets,
+            ctx.accounts.state.anchor_price_x18,
+            ctx.accounts.state.agc_unit as u128,
+        )?;
+
+        let fee = checked_div_u128(
+            checked_mul_u128(
+                amount as u128,
+                ctx.accounts.facility.config.origination_fee_bps as u128,
+            )?,
+            BPS,
+        )? as u64;
+        let net_amount = amount.checked_sub(fee).ok_or(AgcError::MathOverflow)?;
+
+        if net_amount > 0 {
+            mint_with_pda(
+                &ctx.accounts.agc_mint,
+                &ctx.accounts.borrower_agc_destination,
+                &ctx.accounts.mint_authority,
+                &ctx.accounts.token_program,
+                ctx.accounts.state.mint_authority_bump,
+                net_amount,
+            )?;
+        }
+        if fee > 0 {
+            mint_with_pda(
+                &ctx.accounts.agc_mint,
+                &ctx.accounts.treasury_agc,
+                &ctx.accounts.mint_authority,
+                &ctx.accounts.token_program,
+                ctx.accounts.state.mint_authority_bump,
+                fee,
+            )?;
+        }
+
+        ctx.accounts.credit_line.principal_debt_agc = ctx
+            .accounts
+            .credit_line
+            .principal_debt_agc
+            .checked_add(amount)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.facility.total_principal_debt_agc = ctx
+            .accounts
+            .facility
+            .total_principal_debt_agc
+            .checked_add(amount)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.facility.total_drawn_agc = checked_add_u128(
+            ctx.accounts.facility.total_drawn_agc,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.state.credit_principal_outstanding_agc = checked_add_u128(
+            ctx.accounts.state.credit_principal_outstanding_agc,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.state.credit_drawn_agc = checked_add_u128(
+            ctx.accounts.state.credit_drawn_agc,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        emit!(CreditLineDrawn {
+            facility: ctx.accounts.facility.key(),
+            borrower: ctx.accounts.borrower.key(),
+            line: ctx.accounts.credit_line.key(),
+            gross_amount: amount,
+            net_amount,
+            fee,
+        });
+
+        Ok(())
+    }
+
+    pub fn repay_credit_line(ctx: Context<RepayCreditLine>, amount: u64) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.credit_repayments_paused,
+            AgcError::Paused
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require_credit_line_open_for_repayment(&ctx.accounts.credit_line)?;
+
+        accrue_facility_line_interest(
+            &mut ctx.accounts.credit_line,
+            &mut ctx.accounts.facility,
+            current_timestamp()?,
+        )?;
+
+        let outstanding = credit_line_total_debt_agc(&ctx.accounts.credit_line)?;
+        let repay_amount = amount.min(outstanding);
+        require!(repay_amount > 0, AgcError::NoOutstandingDebt);
+
+        let interest_paid = repay_amount.min(ctx.accounts.credit_line.accrued_interest_agc);
+        let principal_paid = repay_amount
+            .checked_sub(interest_paid)
+            .ok_or(AgcError::MathOverflow)?;
+
+        if interest_paid > 0 {
+            token::transfer(
+                CpiContext::new(
+                    ctx.accounts.token_program.key(),
+                    Transfer {
+                        from: ctx.accounts.payer_agc.to_account_info(),
+                        to: ctx.accounts.underwriter_vault_agc.to_account_info(),
+                        authority: ctx.accounts.payer.to_account_info(),
+                    },
+                ),
+                interest_paid,
+            )?;
+            ctx.accounts.credit_line.accrued_interest_agc = ctx
+                .accounts
+                .credit_line
+                .accrued_interest_agc
+                .checked_sub(interest_paid)
+                .ok_or(AgcError::MathOverflow)?;
+            ctx.accounts.facility.total_interest_paid_agc = checked_add_u128(
+                ctx.accounts.facility.total_interest_paid_agc,
+                interest_paid as u128,
+                AgcError::MathOverflow,
+            )?;
+            ctx.accounts.state.credit_interest_paid_agc = checked_add_u128(
+                ctx.accounts.state.credit_interest_paid_agc,
+                interest_paid as u128,
+                AgcError::MathOverflow,
+            )?;
+        }
+
+        if principal_paid > 0 {
+            token::burn(
+                CpiContext::new(
+                    ctx.accounts.token_program.key(),
+                    Burn {
+                        mint: ctx.accounts.agc_mint.to_account_info(),
+                        from: ctx.accounts.payer_agc.to_account_info(),
+                        authority: ctx.accounts.payer.to_account_info(),
+                    },
+                ),
+                principal_paid,
+            )?;
+            ctx.accounts.credit_line.principal_debt_agc = ctx
+                .accounts
+                .credit_line
+                .principal_debt_agc
+                .checked_sub(principal_paid)
+                .ok_or(AgcError::MathOverflow)?;
+            ctx.accounts.facility.total_principal_debt_agc = ctx
+                .accounts
+                .facility
+                .total_principal_debt_agc
+                .checked_sub(principal_paid)
+                .ok_or(AgcError::MathOverflow)?;
+            ctx.accounts.facility.total_repaid_principal_agc = checked_add_u128(
+                ctx.accounts.facility.total_repaid_principal_agc,
+                principal_paid as u128,
+                AgcError::MathOverflow,
+            )?;
+            ctx.accounts.state.credit_principal_outstanding_agc = ctx
+                .accounts
+                .state
+                .credit_principal_outstanding_agc
+                .checked_sub(principal_paid as u128)
+                .ok_or(AgcError::MathOverflow)?;
+            ctx.accounts.state.credit_repaid_agc = checked_add_u128(
+                ctx.accounts.state.credit_repaid_agc,
+                principal_paid as u128,
+                AgcError::MathOverflow,
+            )?;
+        }
+
+        if credit_line_total_debt_agc(&ctx.accounts.credit_line)? == 0 {
+            ctx.accounts.credit_line.status = CreditLineStatus::Repaid;
+            ctx.accounts.credit_line.closed_at = current_timestamp()?;
+            ctx.accounts.facility.active_credit_lines =
+                ctx.accounts.facility.active_credit_lines.saturating_sub(1);
+        }
+
+        emit!(CreditLineRepaid {
+            facility: ctx.accounts.facility.key(),
+            borrower: ctx.accounts.credit_line.borrower,
+            line: ctx.accounts.credit_line.key(),
+            principal_paid,
+            interest_paid,
+        });
+
+        Ok(())
+    }
+
+    pub fn mark_credit_line_default(ctx: Context<MarkCreditLineDefault>) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.liquidations_paused,
+            AgcError::Paused
+        );
+        assert_credit_operator_or_admin(
+            &ctx.accounts.state,
+            ctx.accounts.authority.key(),
+            ctx.accounts.keeper.to_account_info(),
+        )?;
+        require_credit_line_open_for_repayment(&ctx.accounts.credit_line)?;
+
+        let now = current_timestamp()?;
+        accrue_facility_line_interest(
+            &mut ctx.accounts.credit_line,
+            &mut ctx.accounts.facility,
+            now,
+        )?;
+        validate_oracle_fresh(
+            &ctx.accounts.collateral_asset,
+            &ctx.accounts.collateral_oracle,
+            now,
+        )?;
+
+        let health_bps = credit_line_health_bps(
+            &ctx.accounts.credit_line,
+            &ctx.accounts.facility,
+            &ctx.accounts.collateral_oracle,
+            ctx.accounts.credit_line.collateral_amount,
+            ctx.accounts.state.anchor_price_x18,
+            ctx.accounts.state.agc_unit as u128,
+        )?;
+        let matured = now
+            > ctx
+                .accounts
+                .credit_line
+                .maturity_timestamp
+                .saturating_add(ctx.accounts.facility.config.default_grace_seconds);
+        require!(
+            matured || health_bps < ctx.accounts.facility.config.liquidation_health_bps as u128,
+            AgcError::CreditLineHealthy
+        );
+
+        let defaulted_debt = credit_line_total_debt_agc(&ctx.accounts.credit_line)?;
+        let underwriter_loss = defaulted_debt.min(ctx.accounts.underwriter_vault_agc.amount);
+        if underwriter_loss > 0 {
+            burn_from_credit_facility_vault(
+                &ctx.accounts.facility,
+                &ctx.accounts.agc_mint,
+                &ctx.accounts.underwriter_vault_agc,
+                &ctx.accounts.facility_authority,
+                &ctx.accounts.token_program,
+                underwriter_loss,
+            )?;
+        }
+        let uncovered_debt = defaulted_debt
+            .checked_sub(underwriter_loss)
+            .ok_or(AgcError::MathOverflow)?;
+
+        ctx.accounts.credit_line.status = CreditLineStatus::Defaulted;
+        ctx.accounts.credit_line.defaulted_at = now;
+        ctx.accounts.credit_line.underwriter_loss_agc = underwriter_loss;
+        ctx.accounts.credit_line.uncovered_default_agc = uncovered_debt;
+        ctx.accounts.facility.total_principal_debt_agc = ctx
+            .accounts
+            .facility
+            .total_principal_debt_agc
+            .checked_sub(ctx.accounts.credit_line.principal_debt_agc)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.facility.total_defaulted_agc = checked_add_u128(
+            ctx.accounts.facility.total_defaulted_agc,
+            defaulted_debt as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.facility.total_underwriter_loss_agc = checked_add_u128(
+            ctx.accounts.facility.total_underwriter_loss_agc,
+            underwriter_loss as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.facility.active_credit_lines =
+            ctx.accounts.facility.active_credit_lines.saturating_sub(1);
+        ctx.accounts.state.credit_principal_outstanding_agc = ctx
+            .accounts
+            .state
+            .credit_principal_outstanding_agc
+            .checked_sub(ctx.accounts.credit_line.principal_debt_agc as u128)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.state.credit_defaulted_agc = checked_add_u128(
+            ctx.accounts.state.credit_defaulted_agc,
+            defaulted_debt as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.credit_line.principal_debt_agc = 0;
+        ctx.accounts.credit_line.accrued_interest_agc = 0;
+
+        emit!(CreditLineDefaulted {
+            facility: ctx.accounts.facility.key(),
+            borrower: ctx.accounts.credit_line.borrower,
+            line: ctx.accounts.credit_line.key(),
+            defaulted_debt,
+            underwriter_loss,
+            uncovered_debt,
+        });
+
+        Ok(())
+    }
+
+    pub fn seize_defaulted_collateral(
+        ctx: Context<SeizeDefaultedCollateral>,
+        amount: u64,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.liquidations_paused,
+            AgcError::Paused
+        );
+        assert_credit_operator_or_admin(
+            &ctx.accounts.state,
+            ctx.accounts.authority.key(),
+            ctx.accounts.keeper.to_account_info(),
+        )?;
+        require!(
+            ctx.accounts.credit_line.status == CreditLineStatus::Defaulted,
+            AgcError::CreditLineNotDefaulted
+        );
+        require!(amount > 0, AgcError::ZeroAmount);
+        require!(
+            ctx.accounts.credit_line.collateral_amount >= amount,
+            AgcError::InsufficientCollateral
+        );
+
+        transfer_from_credit_facility_vault(
+            &ctx.accounts.facility,
+            &ctx.accounts.collateral_vault,
+            &ctx.accounts.collateral_destination,
+            &ctx.accounts.facility_authority,
+            &ctx.accounts.token_program,
+            amount,
+        )?;
+
+        ctx.accounts.credit_line.collateral_amount = ctx
+            .accounts
+            .credit_line
+            .collateral_amount
+            .checked_sub(amount)
+            .ok_or(AgcError::MathOverflow)?;
+        ctx.accounts.credit_line.collateral_seized = checked_add_u128(
+            ctx.accounts.credit_line.collateral_seized,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+        ctx.accounts.facility.total_collateral_seized = checked_add_u128(
+            ctx.accounts.facility.total_collateral_seized,
+            amount as u128,
+            AgcError::MathOverflow,
+        )?;
+
+        emit!(DefaultedCollateralSeized {
+            facility: ctx.accounts.facility.key(),
+            line: ctx.accounts.credit_line.key(),
+            destination: ctx.accounts.collateral_destination.key(),
+            amount,
+        });
+
         Ok(())
     }
 
@@ -533,6 +1401,11 @@ pub mod agc_solana {
             )?;
             result.mint_allocations.xagc_mint_acp = 0;
         }
+        if state_snapshot.pause_flags.credit_issuance_paused {
+            result.mint_budget_acp = 0;
+            result.mint_rate_bps = 0;
+            result.mint_allocations = MintAllocation::default();
+        }
 
         {
             let state = &mut ctx.accounts.state;
@@ -781,6 +1654,13 @@ pub struct AcceptAdmin<'info> {
 
 #[derive(Accounts)]
 pub struct SetPauseFlags<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetGovernanceAuthorities<'info> {
     #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
     pub state: Box<Account<'info, ProtocolState>>,
     pub admin: Signer<'info>,
@@ -788,37 +1668,456 @@ pub struct SetPauseFlags<'info> {
 
 #[derive(Accounts)]
 pub struct SetPolicyParams<'info> {
-    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
-    pub admin: Signer<'info>,
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct SetMintDistribution<'info> {
-    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
-    pub admin: Signer<'info>,
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct SetSettlementRecipients<'info> {
-    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
-    pub admin: Signer<'info>,
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct SetGrowthProgramsEnabled<'info> {
-    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
-    pub admin: Signer<'info>,
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct SetExitFeeBps<'info> {
-    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
-    pub admin: Signer<'info>,
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetCollateralAsset<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub mint: Box<Account<'info, Mint>>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        seeds = [COLLATERAL_ASSET_SEED, mint.key().as_ref()],
+        bump,
+        space = 8 + CollateralAsset::LEN
+    )]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetCollateralOraclePrice<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    /// CHECK: Deserialized manually only when authority is not admin/risk admin.
+    pub keeper: UncheckedAccount<'info>,
+    pub mint: Box<Account<'info, Mint>>,
+    #[account(
+        seeds = [COLLATERAL_ASSET_SEED, mint.key().as_ref()],
+        bump = collateral_asset.bump,
+        constraint = collateral_asset.mint == mint.key() @ AgcError::InvalidCollateralAssetConfig
+    )]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        seeds = [COLLATERAL_ORACLE_SEED, mint.key().as_ref()],
+        bump,
+        space = 8 + CollateralOracle::LEN
+    )]
+    pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(facility_id: u64)]
+pub struct InitializeCreditFacility<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub collateral_mint: Box<Account<'info, Mint>>,
+    #[account(
+        seeds = [COLLATERAL_ASSET_SEED, collateral_mint.key().as_ref()],
+        bump = collateral_asset.bump,
+        constraint = collateral_asset.mint == collateral_mint.key() @ AgcError::InvalidCollateralAssetConfig
+    )]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [CREDIT_FACILITY_SEED, facility_id.to_le_bytes().as_ref()],
+        bump,
+        space = 8 + CreditFacility::LEN
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    /// CHECK: PDA only signs facility token-vault operations.
+    #[account(seeds = [CREDIT_FACILITY_AUTHORITY_SEED, facility.key().as_ref()], bump)]
+    pub facility_authority: UncheckedAccount<'info>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [CREDIT_COLLATERAL_VAULT_SEED, facility.key().as_ref()],
+        bump,
+        token::mint = collateral_mint,
+        token::authority = facility_authority
+    )]
+    pub collateral_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [UNDERWRITER_VAULT_SEED, facility.key().as_ref()],
+        bump,
+        token::mint = agc_mint,
+        token::authority = facility_authority
+    )]
+    pub underwriter_vault_agc: Box<Account<'info, TokenAccount>>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct SetCreditFacilityConfig<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(address = facility.collateral_asset)]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+}
+
+#[derive(Accounts)]
+pub struct DepositUnderwriterAgc<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(mut)]
+    pub underwriter: Signer<'info>,
+    #[account(
+        mut,
+        constraint = underwriter_agc.owner == underwriter.key() @ AgcError::InvalidTokenAccount,
+        constraint = underwriter_agc.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub underwriter_agc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = facility.underwriter_vault_agc)]
+    pub underwriter_vault_agc: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init_if_needed,
+        payer = underwriter,
+        seeds = [UNDERWRITER_POSITION_SEED, facility.key().as_ref(), underwriter.key().as_ref()],
+        bump,
+        space = 8 + UnderwriterPosition::LEN
+    )]
+    pub underwriter_position: Box<Account<'info, UnderwriterPosition>>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawUnderwriterAgc<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    pub underwriter: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [UNDERWRITER_POSITION_SEED, facility.key().as_ref(), underwriter.key().as_ref()],
+        bump = underwriter_position.bump,
+        constraint = underwriter_position.facility == facility.key() @ AgcError::Unauthorized,
+        constraint = underwriter_position.underwriter == underwriter.key() @ AgcError::Unauthorized
+    )]
+    pub underwriter_position: Box<Account<'info, UnderwriterPosition>>,
+    #[account(mut, address = facility.underwriter_vault_agc)]
+    pub underwriter_vault_agc: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = underwriter_agc_destination.owner == underwriter.key() @ AgcError::InvalidTokenAccount,
+        constraint = underwriter_agc_destination.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub underwriter_agc_destination: Box<Account<'info, TokenAccount>>,
+    /// CHECK: PDA only signs facility token-vault operations.
+    #[account(seeds = [CREDIT_FACILITY_AUTHORITY_SEED, facility.key().as_ref()], bump = facility.authority_bump)]
+    pub facility_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+#[instruction(line_id: u64)]
+pub struct OpenCreditLine<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    /// CHECK: Stored as the approved borrower key.
+    pub borrower: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), borrower.key().as_ref(), line_id.to_le_bytes().as_ref()],
+        bump,
+        space = 8 + CreditLine::LEN
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct DepositCreditCollateral<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized,
+        constraint = credit_line.borrower == borrower.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    pub borrower: Signer<'info>,
+    #[account(
+        mut,
+        constraint = borrower_collateral.owner == borrower.key() @ AgcError::InvalidTokenAccount,
+        constraint = borrower_collateral.mint == facility.collateral_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub borrower_collateral: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = facility.collateral_vault)]
+    pub collateral_vault: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawCreditCollateral<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(address = facility.collateral_asset)]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        seeds = [COLLATERAL_ORACLE_SEED, facility.collateral_mint.as_ref()],
+        bump = collateral_oracle.bump,
+        constraint = collateral_oracle.mint == facility.collateral_mint @ AgcError::InvalidOraclePrice
+    )]
+    pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized,
+        constraint = credit_line.borrower == borrower.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    pub borrower: Signer<'info>,
+    #[account(mut, address = facility.collateral_vault)]
+    pub collateral_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = borrower_collateral_destination.owner == borrower.key() @ AgcError::InvalidTokenAccount,
+        constraint = borrower_collateral_destination.mint == facility.collateral_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub borrower_collateral_destination: Box<Account<'info, TokenAccount>>,
+    /// CHECK: PDA only signs facility token-vault operations.
+    #[account(seeds = [CREDIT_FACILITY_AUTHORITY_SEED, facility.key().as_ref()], bump = facility.authority_bump)]
+    pub facility_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct DrawCreditLine<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(address = facility.collateral_asset)]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        seeds = [COLLATERAL_ORACLE_SEED, facility.collateral_mint.as_ref()],
+        bump = collateral_oracle.bump,
+        constraint = collateral_oracle.mint == facility.collateral_mint @ AgcError::InvalidOraclePrice
+    )]
+    pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized,
+        constraint = credit_line.borrower == borrower.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    pub borrower: Signer<'info>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    #[account(
+        mut,
+        constraint = borrower_agc_destination.owner == borrower.key() @ AgcError::InvalidTokenAccount,
+        constraint = borrower_agc_destination.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub borrower_agc_destination: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = state.treasury_agc)]
+    pub treasury_agc: Box<Account<'info, TokenAccount>>,
+    /// CHECK: PDA only used as SPL mint authority.
+    #[account(seeds = [MINT_AUTHORITY_SEED], bump = state.mint_authority_bump)]
+    pub mint_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct RepayCreditLine<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        constraint = payer_agc.owner == payer.key() @ AgcError::InvalidTokenAccount,
+        constraint = payer_agc.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub payer_agc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = facility.underwriter_vault_agc)]
+    pub underwriter_vault_agc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct MarkCreditLineDefault<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+    /// CHECK: Deserialized manually only when authority is not admin/risk admin.
+    pub keeper: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(address = facility.collateral_asset)]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        seeds = [COLLATERAL_ORACLE_SEED, facility.collateral_mint.as_ref()],
+        bump = collateral_oracle.bump,
+        constraint = collateral_oracle.mint == facility.collateral_mint @ AgcError::InvalidOraclePrice
+    )]
+    pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    #[account(mut, address = facility.underwriter_vault_agc)]
+    pub underwriter_vault_agc: Box<Account<'info, TokenAccount>>,
+    /// CHECK: PDA only signs facility token-vault operations.
+    #[account(seeds = [CREDIT_FACILITY_AUTHORITY_SEED, facility.key().as_ref()], bump = facility.authority_bump)]
+    pub facility_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct SeizeDefaultedCollateral<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+    /// CHECK: Deserialized manually only when authority is not admin/risk admin.
+    pub keeper: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [CREDIT_FACILITY_SEED, facility.facility_id.to_le_bytes().as_ref()],
+        bump = facility.bump
+    )]
+    pub facility: Box<Account<'info, CreditFacility>>,
+    #[account(address = facility.collateral_asset)]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        mut,
+        seeds = [CREDIT_LINE_SEED, facility.key().as_ref(), credit_line.borrower.as_ref(), credit_line.line_id.to_le_bytes().as_ref()],
+        bump = credit_line.bump,
+        constraint = credit_line.facility == facility.key() @ AgcError::Unauthorized
+    )]
+    pub credit_line: Box<Account<'info, CreditLine>>,
+    #[account(mut, address = facility.collateral_vault)]
+    pub collateral_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        address = collateral_asset.reserve_token_account,
+        constraint = collateral_destination.mint == facility.collateral_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub collateral_destination: Box<Account<'info, TokenAccount>>,
+    /// CHECK: PDA only signs facility token-vault operations.
+    #[account(seeds = [CREDIT_FACILITY_AUTHORITY_SEED, facility.key().as_ref()], bump = facility.authority_bump)]
+    pub facility_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
@@ -945,6 +2244,8 @@ pub struct BurnTreasuryAgc<'info> {
 pub struct ProtocolState {
     pub admin: Pubkey,
     pub pending_admin: Pubkey,
+    pub risk_admin: Pubkey,
+    pub emergency_admin: Pubkey,
     pub agc_mint: Pubkey,
     pub xagc_mint: Pubkey,
     pub usdc_mint: Pubkey,
@@ -983,6 +2284,11 @@ pub struct ProtocolState {
     pub last_premium_bps: u128,
     pub last_locked_share_bps: u128,
     pub last_lock_flow_bps: u128,
+    pub last_stable_cash_coverage_bps: u128,
+    pub last_liquidity_depth_coverage_bps: u128,
+    pub last_reserve_concentration_bps: u128,
+    pub last_oracle_confidence_bps: u128,
+    pub last_stale_oracle_count: u16,
     pub last_settled_epoch: u64,
     pub last_settlement_timestamp: u64,
     pub recovery_cooldown_epochs_remaining: u64,
@@ -995,6 +2301,13 @@ pub struct ProtocolState {
     pub last_xagc_deposit_total: u128,
     pub last_xagc_redemption_total: u128,
     pub buyback_execution_nonce: u64,
+    pub protocol_version: u16,
+    pub credit_facility_count: u64,
+    pub credit_principal_outstanding_agc: u128,
+    pub credit_drawn_agc: u128,
+    pub credit_repaid_agc: u128,
+    pub credit_interest_paid_agc: u128,
+    pub credit_defaulted_agc: u128,
     pub accumulator: EpochAccumulator,
     pub last_epoch_result: EpochResult,
 }
@@ -1017,29 +2330,35 @@ impl Keeper {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct KeeperPermissions {
     pub market_reporter: bool,
+    pub oracle_reporter: bool,
     pub epoch_settler: bool,
     pub buyback_executor: bool,
     pub treasury_burner: bool,
+    pub credit_operator: bool,
 }
 
 impl KeeperPermissions {
-    pub const LEN: usize = 4;
+    pub const LEN: usize = 6;
 
     pub fn all() -> Self {
         Self {
             market_reporter: true,
+            oracle_reporter: true,
             epoch_settler: true,
             buyback_executor: true,
             treasury_burner: true,
+            credit_operator: true,
         }
     }
 
     fn allows(self, required: RequiredKeeperPermission) -> bool {
         match required {
             RequiredKeeperPermission::ReportMarket => self.market_reporter,
+            RequiredKeeperPermission::ReportOracle => self.oracle_reporter,
             RequiredKeeperPermission::SettleEpoch => self.epoch_settler,
             RequiredKeeperPermission::ExecuteBuyback => self.buyback_executor,
             RequiredKeeperPermission::BurnTreasury => self.treasury_burner,
+            RequiredKeeperPermission::OperateCredit => self.credit_operator,
         }
     }
 }
@@ -1047,9 +2366,11 @@ impl KeeperPermissions {
 #[derive(Clone, Copy)]
 enum RequiredKeeperPermission {
     ReportMarket,
+    ReportOracle,
     SettleEpoch,
     ExecuteBuyback,
     BurnTreasury,
+    OperateCredit,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
@@ -1058,8 +2379,203 @@ pub struct PauseFlags {
     pub xagc_redemptions_paused: bool,
     pub market_reporting_paused: bool,
     pub settlement_paused: bool,
+    pub credit_issuance_paused: bool,
+    pub collateral_updates_paused: bool,
     pub buybacks_paused: bool,
     pub treasury_burns_paused: bool,
+    pub credit_facility_updates_paused: bool,
+    pub credit_line_updates_paused: bool,
+    pub credit_draws_paused: bool,
+    pub credit_repayments_paused: bool,
+    pub underwriter_deposits_paused: bool,
+    pub underwriter_withdrawals_paused: bool,
+    pub liquidations_paused: bool,
+}
+
+#[account]
+pub struct CollateralAsset {
+    pub mint: Pubkey,
+    pub mint_decimals: u8,
+    pub oracle_feed: Pubkey,
+    pub reserve_token_account: Pubkey,
+    pub asset_class: AssetClass,
+    pub reserve_weight_bps: u16,
+    pub collateral_factor_bps: u16,
+    pub liquidation_threshold_bps: u16,
+    pub max_concentration_bps: u16,
+    pub max_oracle_staleness_seconds: u64,
+    pub max_oracle_confidence_bps: u16,
+    pub enabled: bool,
+    pub bump: u8,
+}
+
+impl CollateralAsset {
+    pub const LEN: usize = 32 + 1 + 32 + 32 + 1 + 2 + 2 + 2 + 2 + 8 + 2 + 1 + 1 + 64;
+}
+
+#[account]
+pub struct CollateralOracle {
+    pub mint: Pubkey,
+    pub oracle_feed: Pubkey,
+    pub price_quote_x18: u128,
+    pub confidence_bps: u16,
+    pub updated_at: u64,
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl CollateralOracle {
+    pub const LEN: usize = 32 + 32 + 16 + 2 + 8 + 1 + 64;
+}
+
+#[account]
+pub struct CreditFacility {
+    pub facility_id: u64,
+    pub collateral_mint: Pubkey,
+    pub collateral_asset: Pubkey,
+    pub collateral_vault: Pubkey,
+    pub underwriter_vault_agc: Pubkey,
+    pub collateral_decimals: u8,
+    pub config: CreditFacilityConfig,
+    pub status: CreditFacilityStatus,
+    pub underwriter_total_shares: u64,
+    pub total_principal_debt_agc: u64,
+    pub total_underwriter_deposits_agc: u128,
+    pub total_underwriter_withdrawals_agc: u128,
+    pub total_drawn_agc: u128,
+    pub total_repaid_principal_agc: u128,
+    pub total_interest_accrued_agc: u128,
+    pub total_interest_paid_agc: u128,
+    pub total_defaulted_agc: u128,
+    pub total_underwriter_loss_agc: u128,
+    pub total_collateral_deposited: u128,
+    pub total_collateral_seized: u128,
+    pub active_credit_lines: u64,
+    pub created_at: u64,
+    pub bump: u8,
+    pub authority_bump: u8,
+    pub collateral_vault_bump: u8,
+    pub underwriter_vault_bump: u8,
+    pub reserved: [u8; 256],
+}
+
+impl CreditFacility {
+    pub const LEN: usize = 1024;
+}
+
+#[account]
+pub struct UnderwriterPosition {
+    pub facility: Pubkey,
+    pub underwriter: Pubkey,
+    pub shares: u64,
+    pub deposited_agc: u128,
+    pub withdrawn_agc: u128,
+    pub loss_agc: u128,
+    pub bump: u8,
+    pub reserved: [u8; 128],
+}
+
+impl UnderwriterPosition {
+    pub const LEN: usize = 32 + 32 + 8 + 16 + 16 + 16 + 1 + 128;
+}
+
+#[account]
+pub struct CreditLine {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line_id: u64,
+    pub credit_limit_agc: u64,
+    pub principal_debt_agc: u64,
+    pub accrued_interest_agc: u64,
+    pub collateral_amount: u64,
+    pub maturity_timestamp: u64,
+    pub opened_at: u64,
+    pub last_accrued_at: u64,
+    pub defaulted_at: u64,
+    pub closed_at: u64,
+    pub status: CreditLineStatus,
+    pub underwriter_loss_agc: u64,
+    pub uncovered_default_agc: u64,
+    pub collateral_seized: u128,
+    pub bump: u8,
+    pub reserved: [u8; 128],
+}
+
+impl CreditLine {
+    pub const LEN: usize =
+        32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 8 + 8 + 16 + 1 + 128;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum AssetClass {
+    #[default]
+    Stable,
+    Btc,
+    Rwa,
+    Other,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CreditFacilityStatus {
+    #[default]
+    Uninitialized,
+    Active,
+    Disabled,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CreditLineStatus {
+    #[default]
+    Uninitialized,
+    Active,
+    Repaid,
+    Defaulted,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct CollateralOraclePriceInput {
+    pub price_quote_x18: u128,
+    pub confidence_bps: u16,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct CreditFacilityConfig {
+    pub max_total_debt_agc: u64,
+    pub max_line_debt_agc: u64,
+    pub min_collateral_health_bps: u16,
+    pub liquidation_health_bps: u16,
+    pub min_underwriter_reserve_bps: u16,
+    pub interest_rate_bps: u16,
+    pub origination_fee_bps: u16,
+    pub default_grace_seconds: u64,
+    pub isolated: bool,
+    pub enabled: bool,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct OpenCreditLineArgs {
+    pub credit_limit_agc: u64,
+    pub maturity_timestamp: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct CollateralAssetConfig {
+    pub oracle_feed: Pubkey,
+    pub reserve_token_account: Pubkey,
+    pub asset_class: AssetClass,
+    pub reserve_weight_bps: u16,
+    pub collateral_factor_bps: u16,
+    pub liquidation_threshold_bps: u16,
+    pub max_concentration_bps: u16,
+    pub max_oracle_staleness_seconds: u64,
+    pub max_oracle_confidence_bps: u16,
+    pub enabled: bool,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct GovernanceAuthorities {
+    pub risk_admin: Pubkey,
+    pub emergency_admin: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -1126,6 +2642,14 @@ pub struct PolicyParams {
     pub neutral_reserve_coverage_bps: u16,
     pub defense_reserve_coverage_bps: u16,
     pub hard_defense_reserve_coverage_bps: u16,
+    pub min_stable_cash_coverage_bps: u16,
+    pub target_stable_cash_coverage_bps: u16,
+    pub defense_stable_cash_coverage_bps: u16,
+    pub min_liquidity_depth_coverage_bps: u16,
+    pub target_liquidity_depth_coverage_bps: u16,
+    pub max_reserve_concentration_bps: u16,
+    pub max_oracle_confidence_bps: u16,
+    pub max_stale_oracle_count: u16,
     pub max_expansion_volatility_bps: u16,
     pub defense_volatility_bps: u16,
     pub max_expansion_exit_pressure_bps: u16,
@@ -1175,6 +2699,12 @@ pub struct EpochSnapshot {
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct ExternalMetrics {
     pub depth_to_target_slippage_quote_x18: u128,
+    pub stable_cash_reserve_quote_x18: u128,
+    pub risk_weighted_reserve_quote_x18: u128,
+    pub liquidity_depth_quote_x18: u128,
+    pub largest_collateral_concentration_bps: u16,
+    pub oracle_confidence_bps: u16,
+    pub stale_oracle_count: u16,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1214,6 +2744,8 @@ pub struct EpochResult {
     pub buy_growth_bps: u128,
     pub exit_pressure_bps: u128,
     pub reserve_coverage_bps: u128,
+    pub stable_cash_coverage_bps: u128,
+    pub liquidity_depth_coverage_bps: u128,
     pub locked_share_bps: u128,
     pub lock_flow_bps: u128,
     pub demand_score_bps: u128,
@@ -1226,6 +2758,12 @@ pub struct EpochResult {
     pub gross_sell_quote_x18: u128,
     pub total_volume_quote_x18: u128,
     pub depth_to_target_slippage_quote_x18: u128,
+    pub stable_cash_reserve_quote_x18: u128,
+    pub risk_weighted_reserve_quote_x18: u128,
+    pub liquidity_depth_quote_x18: u128,
+    pub largest_collateral_concentration_bps: u16,
+    pub oracle_confidence_bps: u16,
+    pub stale_oracle_count: u16,
     pub realized_volatility_bps: u128,
     pub xagc_deposits_acp: u128,
     pub xagc_gross_redemptions_acp: u128,
@@ -1285,6 +2823,117 @@ pub struct AdminTransferred {
 #[event]
 pub struct PauseFlagsUpdated {
     pub pause_flags: PauseFlags,
+}
+
+#[event]
+pub struct GovernanceAuthoritiesUpdated {
+    pub authorities: GovernanceAuthorities,
+}
+
+#[event]
+pub struct CollateralAssetUpdated {
+    pub mint: Pubkey,
+    pub config: CollateralAssetConfig,
+}
+
+#[event]
+pub struct CollateralOraclePriceUpdated {
+    pub mint: Pubkey,
+    pub price_quote_x18: u128,
+    pub confidence_bps: u16,
+    pub updated_at: u64,
+}
+
+#[event]
+pub struct CreditFacilityInitialized {
+    pub facility: Pubkey,
+    pub facility_id: u64,
+    pub collateral_mint: Pubkey,
+    pub config: CreditFacilityConfig,
+}
+
+#[event]
+pub struct CreditFacilityConfigUpdated {
+    pub facility: Pubkey,
+    pub config: CreditFacilityConfig,
+}
+
+#[event]
+pub struct UnderwriterAgcDeposited {
+    pub facility: Pubkey,
+    pub underwriter: Pubkey,
+    pub amount: u64,
+    pub shares: u64,
+}
+
+#[event]
+pub struct UnderwriterAgcWithdrawn {
+    pub facility: Pubkey,
+    pub underwriter: Pubkey,
+    pub assets: u64,
+    pub shares: u64,
+}
+
+#[event]
+pub struct CreditLineOpened {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line_id: u64,
+    pub credit_limit_agc: u64,
+    pub maturity_timestamp: u64,
+}
+
+#[event]
+pub struct CreditCollateralDeposited {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct CreditCollateralWithdrawn {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct CreditLineDrawn {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line: Pubkey,
+    pub gross_amount: u64,
+    pub net_amount: u64,
+    pub fee: u64,
+}
+
+#[event]
+pub struct CreditLineRepaid {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line: Pubkey,
+    pub principal_paid: u64,
+    pub interest_paid: u64,
+}
+
+#[event]
+pub struct CreditLineDefaulted {
+    pub facility: Pubkey,
+    pub borrower: Pubkey,
+    pub line: Pubkey,
+    pub defaulted_debt: u64,
+    pub underwriter_loss: u64,
+    pub uncovered_debt: u64,
+}
+
+#[event]
+pub struct DefaultedCollateralSeized {
+    pub facility: Pubkey,
+    pub line: Pubkey,
+    pub destination: Pubkey,
+    pub amount: u64,
 }
 
 #[event]
@@ -1402,6 +3051,38 @@ pub enum AgcError {
     Paused,
     #[msg("The requested admin is invalid.")]
     InvalidAdmin,
+    #[msg("The requested governance authority is invalid.")]
+    InvalidGovernanceAuthority,
+    #[msg("The collateral asset configuration is invalid.")]
+    InvalidCollateralAssetConfig,
+    #[msg("The cached oracle price is invalid or stale.")]
+    InvalidOraclePrice,
+    #[msg("The collateral asset is disabled.")]
+    CollateralDisabled,
+    #[msg("The credit facility configuration is invalid.")]
+    InvalidCreditFacilityConfig,
+    #[msg("The credit line configuration is invalid.")]
+    InvalidCreditLineConfig,
+    #[msg("The credit facility is not active.")]
+    CreditFacilityInactive,
+    #[msg("The credit line is not active.")]
+    CreditLineInactive,
+    #[msg("The requested draw exceeds the credit line limit.")]
+    CreditLimitExceeded,
+    #[msg("The credit line does not have enough collateral.")]
+    InsufficientCollateral,
+    #[msg("The credit line would be undercollateralized.")]
+    InsufficientCreditHealth,
+    #[msg("The underwriter vault would fall below required reserves.")]
+    InsufficientUnderwriterReserve,
+    #[msg("The credit line has already matured.")]
+    CreditLineMatured,
+    #[msg("The credit line has no outstanding debt.")]
+    NoOutstandingDebt,
+    #[msg("The credit line is still healthy.")]
+    CreditLineHealthy,
+    #[msg("The credit line is not defaulted.")]
+    CreditLineNotDefaulted,
     #[msg("Arithmetic overflow or underflow.")]
     MathOverflow,
     #[msg("A u128 policy amount does not fit into a u64 SPL token amount.")]
@@ -1436,6 +3117,394 @@ fn validate_distribution(distribution: MintDistribution) -> Result<()> {
         total == BPS as u32 && distribution.xagc_bps > 0,
         AgcError::InvalidMintDistribution
     );
+    Ok(())
+}
+
+fn validate_governance_authorities(authorities: GovernanceAuthorities) -> Result<()> {
+    require!(
+        authorities.risk_admin != Pubkey::default()
+            && authorities.emergency_admin != Pubkey::default(),
+        AgcError::InvalidGovernanceAuthority
+    );
+    Ok(())
+}
+
+fn validate_collateral_asset_config(config: CollateralAssetConfig) -> Result<()> {
+    require!(
+        config.reserve_weight_bps <= BPS as u16,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    require!(
+        config.collateral_factor_bps <= config.liquidation_threshold_bps,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    require!(
+        config.liquidation_threshold_bps <= BPS as u16,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    require!(
+        config.max_concentration_bps > 0 && config.max_concentration_bps <= BPS as u16,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    require!(
+        config.max_oracle_staleness_seconds > 0,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    require!(
+        config.max_oracle_confidence_bps <= BPS as u16,
+        AgcError::InvalidCollateralAssetConfig
+    );
+    if config.enabled {
+        require!(
+            config.oracle_feed != Pubkey::default(),
+            AgcError::InvalidCollateralAssetConfig
+        );
+        require!(
+            config.reserve_token_account != Pubkey::default(),
+            AgcError::InvalidCollateralAssetConfig
+        );
+    }
+    Ok(())
+}
+
+fn validate_credit_facility_config(
+    config: CreditFacilityConfig,
+    asset_class: AssetClass,
+) -> Result<()> {
+    if config.enabled {
+        require!(
+            config.max_total_debt_agc > 0 && config.max_line_debt_agc > 0,
+            AgcError::InvalidCreditFacilityConfig
+        );
+        require!(
+            config.min_underwriter_reserve_bps > 0,
+            AgcError::InvalidCreditFacilityConfig
+        );
+    }
+    require!(
+        config.max_line_debt_agc <= config.max_total_debt_agc,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    require!(
+        config.liquidation_health_bps >= BPS as u16,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    require!(
+        config.min_collateral_health_bps >= config.liquidation_health_bps,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    require!(
+        config.min_underwriter_reserve_bps <= BPS as u16,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    require!(
+        config.interest_rate_bps <= BPS as u16 && config.origination_fee_bps < BPS as u16,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    require!(
+        config.default_grace_seconds > 0,
+        AgcError::InvalidCreditFacilityConfig
+    );
+    if asset_class == AssetClass::Rwa {
+        require!(config.isolated, AgcError::InvalidCreditFacilityConfig);
+    }
+    Ok(())
+}
+
+fn validate_open_credit_line_args(
+    args: OpenCreditLineArgs,
+    facility: &CreditFacility,
+) -> Result<()> {
+    require!(
+        args.credit_limit_agc > 0 && args.credit_limit_agc <= facility.config.max_line_debt_agc,
+        AgcError::InvalidCreditLineConfig
+    );
+    Ok(())
+}
+
+fn require_facility_active(facility: &CreditFacility) -> Result<()> {
+    require!(
+        facility.status == CreditFacilityStatus::Active && facility.config.enabled,
+        AgcError::CreditFacilityInactive
+    );
+    Ok(())
+}
+
+fn require_credit_line_active(credit_line: &CreditLine) -> Result<()> {
+    require!(
+        credit_line.status == CreditLineStatus::Active,
+        AgcError::CreditLineInactive
+    );
+    Ok(())
+}
+
+fn require_credit_line_open_for_repayment(credit_line: &CreditLine) -> Result<()> {
+    require_credit_line_active(credit_line)
+}
+
+fn validate_oracle_fresh(
+    collateral_asset: &CollateralAsset,
+    collateral_oracle: &CollateralOracle,
+    now: u64,
+) -> Result<()> {
+    require_keys_eq!(
+        collateral_oracle.mint,
+        collateral_asset.mint,
+        AgcError::InvalidOraclePrice
+    );
+    require_keys_eq!(
+        collateral_oracle.oracle_feed,
+        collateral_asset.oracle_feed,
+        AgcError::InvalidOraclePrice
+    );
+    require!(
+        collateral_oracle.price_quote_x18 > 0,
+        AgcError::InvalidOraclePrice
+    );
+    require!(
+        collateral_oracle.confidence_bps <= collateral_asset.max_oracle_confidence_bps,
+        AgcError::InvalidOraclePrice
+    );
+    require!(
+        now.saturating_sub(collateral_oracle.updated_at)
+            <= collateral_asset.max_oracle_staleness_seconds,
+        AgcError::InvalidOraclePrice
+    );
+    Ok(())
+}
+
+fn credit_line_total_debt_agc(credit_line: &CreditLine) -> Result<u64> {
+    credit_line
+        .principal_debt_agc
+        .checked_add(credit_line.accrued_interest_agc)
+        .ok_or(error!(AgcError::MathOverflow))
+}
+
+fn collateral_value_quote_x18(
+    collateral_amount: u64,
+    collateral_decimals: u8,
+    collateral_price_quote_x18: u128,
+) -> Result<u128> {
+    let collateral_unit = pow10_u128(collateral_decimals)?;
+    mul_div(
+        collateral_amount as u128,
+        collateral_price_quote_x18,
+        collateral_unit,
+    )
+}
+
+fn agc_value_quote_x18(amount_agc: u64, anchor_price_x18: u128, agc_unit: u128) -> Result<u128> {
+    mul_div(amount_agc as u128, anchor_price_x18, agc_unit)
+}
+
+fn credit_line_health_bps(
+    credit_line: &CreditLine,
+    facility: &CreditFacility,
+    collateral_oracle: &CollateralOracle,
+    collateral_amount: u64,
+    anchor_price_x18: u128,
+    agc_unit: u128,
+) -> Result<u128> {
+    let total_debt_agc = credit_line_total_debt_agc(credit_line)?;
+    credit_health_bps_for_debt(
+        facility,
+        collateral_oracle,
+        collateral_amount,
+        total_debt_agc,
+        anchor_price_x18,
+        agc_unit,
+    )
+}
+
+fn credit_health_bps_for_debt(
+    facility: &CreditFacility,
+    collateral_oracle: &CollateralOracle,
+    collateral_amount: u64,
+    total_debt_agc: u64,
+    anchor_price_x18: u128,
+    agc_unit: u128,
+) -> Result<u128> {
+    if total_debt_agc == 0 {
+        return Ok(u128::MAX);
+    }
+
+    let collateral_value = collateral_value_quote_x18(
+        collateral_amount,
+        facility.collateral_decimals,
+        collateral_oracle.price_quote_x18,
+    )?;
+    let debt_value = agc_value_quote_x18(total_debt_agc, anchor_price_x18, agc_unit)?;
+    safe_div(checked_mul_u128(collateral_value, BPS)?, debt_value)
+}
+
+fn validate_credit_line_health(
+    credit_line: &CreditLine,
+    facility: &CreditFacility,
+    collateral_oracle: &CollateralOracle,
+    collateral_amount: u64,
+    anchor_price_x18: u128,
+    agc_unit: u128,
+    min_health_bps: u16,
+) -> Result<()> {
+    let health_bps = credit_line_health_bps(
+        credit_line,
+        facility,
+        collateral_oracle,
+        collateral_amount,
+        anchor_price_x18,
+        agc_unit,
+    )?;
+    require!(
+        health_bps >= min_health_bps as u128,
+        AgcError::InsufficientCreditHealth
+    );
+    Ok(())
+}
+
+fn validate_credit_draw(
+    credit_line: &CreditLine,
+    facility: &CreditFacility,
+    collateral_asset: &CollateralAsset,
+    collateral_oracle: &CollateralOracle,
+    draw_amount: u64,
+    underwriter_vault_assets_agc: u64,
+    anchor_price_x18: u128,
+    agc_unit: u128,
+) -> Result<()> {
+    require!(collateral_asset.enabled, AgcError::CollateralDisabled);
+    let new_principal_debt = credit_line
+        .principal_debt_agc
+        .checked_add(draw_amount)
+        .ok_or(AgcError::MathOverflow)?;
+    let new_total_debt = new_principal_debt
+        .checked_add(credit_line.accrued_interest_agc)
+        .ok_or(AgcError::MathOverflow)?;
+    require!(
+        new_total_debt <= credit_line.credit_limit_agc
+            && new_total_debt <= facility.config.max_line_debt_agc,
+        AgcError::CreditLimitExceeded
+    );
+    let facility_principal_after = facility
+        .total_principal_debt_agc
+        .checked_add(draw_amount)
+        .ok_or(AgcError::MathOverflow)?;
+    require!(
+        facility_principal_after <= facility.config.max_total_debt_agc,
+        AgcError::CreditLimitExceeded
+    );
+
+    let required_underwriter_assets = mul_div(
+        facility_principal_after as u128,
+        facility.config.min_underwriter_reserve_bps as u128,
+        BPS,
+    )?;
+    require!(
+        underwriter_vault_assets_agc as u128 >= required_underwriter_assets,
+        AgcError::InsufficientUnderwriterReserve
+    );
+
+    let collateral_value = collateral_value_quote_x18(
+        credit_line.collateral_amount,
+        facility.collateral_decimals,
+        collateral_oracle.price_quote_x18,
+    )?;
+    let borrowable_value = mul_div(
+        collateral_value,
+        collateral_asset.collateral_factor_bps as u128,
+        BPS,
+    )?;
+    let debt_value = agc_value_quote_x18(new_total_debt, anchor_price_x18, agc_unit)?;
+    require!(
+        debt_value <= borrowable_value,
+        AgcError::InsufficientCollateral
+    );
+
+    let health_bps = credit_health_bps_for_debt(
+        facility,
+        collateral_oracle,
+        credit_line.collateral_amount,
+        new_total_debt,
+        anchor_price_x18,
+        agc_unit,
+    )?;
+    require!(
+        health_bps >= facility.config.min_collateral_health_bps as u128,
+        AgcError::InsufficientCreditHealth
+    );
+    Ok(())
+}
+
+fn accounted_underwriter_assets_agc(facility: &CreditFacility) -> Result<u64> {
+    let inflows = checked_add_u128(
+        facility.total_underwriter_deposits_agc,
+        facility.total_interest_paid_agc,
+        AgcError::MathOverflow,
+    )?;
+    let outflows = checked_add_u128(
+        facility.total_underwriter_withdrawals_agc,
+        facility.total_underwriter_loss_agc,
+        AgcError::MathOverflow,
+    )?;
+    let assets = inflows.saturating_sub(outflows);
+    u64::try_from(assets).map_err(|_| error!(AgcError::AmountTooLarge))
+}
+
+fn validate_underwriter_reserve(
+    facility: &CreditFacility,
+    underwriter_vault_assets_agc: u64,
+) -> Result<()> {
+    let required_underwriter_assets = mul_div(
+        facility.total_principal_debt_agc as u128,
+        facility.config.min_underwriter_reserve_bps as u128,
+        BPS,
+    )?;
+    require!(
+        underwriter_vault_assets_agc as u128 >= required_underwriter_assets,
+        AgcError::InsufficientUnderwriterReserve
+    );
+    Ok(())
+}
+
+fn accrue_facility_line_interest(
+    credit_line: &mut CreditLine,
+    facility: &mut CreditFacility,
+    now: u64,
+) -> Result<()> {
+    if credit_line.status != CreditLineStatus::Active {
+        return Ok(());
+    }
+    if now <= credit_line.last_accrued_at {
+        return Ok(());
+    }
+    if credit_line.principal_debt_agc == 0 {
+        credit_line.last_accrued_at = now;
+        return Ok(());
+    }
+
+    let elapsed = now - credit_line.last_accrued_at;
+    let annual_interest = checked_mul_u128(
+        credit_line.principal_debt_agc as u128,
+        facility.config.interest_rate_bps as u128,
+    )?;
+    let elapsed_interest = checked_div_u128(
+        checked_mul_u128(annual_interest, elapsed as u128)?,
+        checked_mul_u128(BPS, SECONDS_PER_YEAR)?,
+    )?;
+    let interest_u64 =
+        u64::try_from(elapsed_interest).map_err(|_| error!(AgcError::AmountTooLarge))?;
+
+    if interest_u64 > 0 {
+        credit_line.accrued_interest_agc = credit_line
+            .accrued_interest_agc
+            .checked_add(interest_u64)
+            .ok_or(AgcError::MathOverflow)?;
+        facility.total_interest_accrued_agc = checked_add_u128(
+            facility.total_interest_accrued_agc,
+            interest_u64 as u128,
+            AgcError::MathOverflow,
+        )?;
+    }
+    credit_line.last_accrued_at = now;
     Ok(())
 }
 
@@ -1496,6 +3565,27 @@ fn validate_policy_params(params: PolicyParams) -> Result<()> {
     );
     require!(
         params.neutral_reserve_coverage_bps <= params.expansion_reserve_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.defense_stable_cash_coverage_bps <= params.min_stable_cash_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.min_stable_cash_coverage_bps < params.target_stable_cash_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.min_liquidity_depth_coverage_bps < params.target_liquidity_depth_coverage_bps,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_reserve_concentration_bps > 0
+            && params.max_reserve_concentration_bps <= BPS as u16,
+        AgcError::InvalidPolicyParams
+    );
+    require!(
+        params.max_oracle_confidence_bps <= BPS as u16,
         AgcError::InvalidPolicyParams
     );
     require!(
@@ -1576,6 +3666,54 @@ fn assert_market_reporter_or_admin(
         keeper_info,
         RequiredKeeperPermission::ReportMarket,
     )
+}
+
+fn assert_oracle_reporter_or_admin(
+    state: &ProtocolState,
+    authority_key: Pubkey,
+    keeper_info: AccountInfo,
+) -> Result<()> {
+    if authority_key == state.admin || authority_key == state.risk_admin {
+        return Ok(());
+    }
+    assert_keeper_permission_or_admin(
+        state,
+        authority_key,
+        keeper_info,
+        RequiredKeeperPermission::ReportOracle,
+    )
+}
+
+fn assert_credit_operator_or_admin(
+    state: &ProtocolState,
+    authority_key: Pubkey,
+    keeper_info: AccountInfo,
+) -> Result<()> {
+    if authority_key == state.admin || authority_key == state.risk_admin {
+        return Ok(());
+    }
+    assert_keeper_permission_or_admin(
+        state,
+        authority_key,
+        keeper_info,
+        RequiredKeeperPermission::OperateCredit,
+    )
+}
+
+fn assert_risk_authority_or_admin(state: &ProtocolState, authority_key: Pubkey) -> Result<()> {
+    require!(
+        authority_key == state.admin || authority_key == state.risk_admin,
+        AgcError::Unauthorized
+    );
+    Ok(())
+}
+
+fn assert_emergency_authority_or_admin(state: &ProtocolState, authority_key: Pubkey) -> Result<()> {
+    require!(
+        authority_key == state.admin || authority_key == state.emergency_admin,
+        AgcError::Unauthorized
+    );
+    Ok(())
 }
 
 fn assert_keeper_permission_or_admin(
@@ -1872,8 +4010,31 @@ fn evaluate_epoch(
         checked_mul_u128(gross_sell_quote_x18, BPS)?,
         total_volume_quote_x18,
     )?;
+    let stable_cash_reserve_quote_x18 = if external_metrics.stable_cash_reserve_quote_x18 > 0 {
+        external_metrics.stable_cash_reserve_quote_x18
+    } else {
+        state.treasury_quote_x18
+    };
+    let risk_weighted_reserve_quote_x18 = if external_metrics.risk_weighted_reserve_quote_x18 > 0 {
+        external_metrics.risk_weighted_reserve_quote_x18
+    } else {
+        stable_cash_reserve_quote_x18
+    };
+    let liquidity_depth_quote_x18 = if external_metrics.liquidity_depth_quote_x18 > 0 {
+        external_metrics.liquidity_depth_quote_x18
+    } else {
+        external_metrics.depth_to_target_slippage_quote_x18
+    };
     let reserve_coverage_bps = safe_div(
-        checked_mul_u128(external_metrics.depth_to_target_slippage_quote_x18, BPS)?,
+        checked_mul_u128(risk_weighted_reserve_quote_x18, BPS)?,
+        credit_outstanding_quote_x18,
+    )?;
+    let stable_cash_coverage_bps = safe_div(
+        checked_mul_u128(stable_cash_reserve_quote_x18, BPS)?,
+        credit_outstanding_quote_x18,
+    )?;
+    let liquidity_depth_coverage_bps = safe_div(
+        checked_mul_u128(liquidity_depth_quote_x18, BPS)?,
         credit_outstanding_quote_x18,
     )?;
     let locked_share_bps = safe_div(
@@ -1926,8 +4087,16 @@ fn evaluate_epoch(
         policy_params.max_anchor_crawl_bps,
     )?;
 
+    let oracle_health_blocked = external_metrics.oracle_confidence_bps
+        > policy_params.max_oracle_confidence_bps
+        || external_metrics.stale_oracle_count > policy_params.max_stale_oracle_count;
+    let concentration_blocked = external_metrics.largest_collateral_concentration_bps
+        > policy_params.max_reserve_concentration_bps;
+
     let in_defense = price_twap_x18 < stressed_floor_x18
         || reserve_coverage_bps < policy_params.defense_reserve_coverage_bps as u128
+        || stable_cash_coverage_bps < policy_params.defense_stable_cash_coverage_bps as u128
+        || oracle_health_blocked
         || snapshot.realized_volatility_bps >= policy_params.defense_volatility_bps as u128
         || exit_pressure_bps >= policy_params.defense_exit_pressure_bps as u128;
 
@@ -1938,6 +4107,10 @@ fn evaluate_epoch(
         && lock_flow_bps > 0
         && locked_share_bps >= policy_params.min_locked_share_bps as u128
         && reserve_coverage_bps >= policy_params.expansion_reserve_coverage_bps as u128
+        && stable_cash_coverage_bps >= policy_params.min_stable_cash_coverage_bps as u128
+        && liquidity_depth_coverage_bps >= policy_params.min_liquidity_depth_coverage_bps as u128
+        && !concentration_blocked
+        && !oracle_health_blocked
         && snapshot.realized_volatility_bps <= policy_params.max_expansion_volatility_bps as u128
         && exit_pressure_bps <= policy_params.max_expansion_exit_pressure_bps as u128
         && buy_growth_bps > 0;
@@ -2029,6 +4202,43 @@ fn evaluate_epoch(
                 BPS,
             )
         };
+        let stable_cash_health_bps = if stable_cash_coverage_bps
+            <= policy_params.min_stable_cash_coverage_bps as u128
+        {
+            0
+        } else {
+            min_u128(
+                safe_div(
+                    checked_mul_u128(
+                        stable_cash_coverage_bps
+                            - policy_params.min_stable_cash_coverage_bps as u128,
+                        BPS,
+                    )?,
+                    (policy_params.target_stable_cash_coverage_bps
+                        - policy_params.min_stable_cash_coverage_bps) as u128,
+                )?,
+                BPS,
+            )
+        };
+        let liquidity_health_bps = if liquidity_depth_coverage_bps
+            <= policy_params.min_liquidity_depth_coverage_bps as u128
+        {
+            0
+        } else {
+            min_u128(
+                safe_div(
+                    checked_mul_u128(
+                        liquidity_depth_coverage_bps
+                            - policy_params.min_liquidity_depth_coverage_bps as u128,
+                        BPS,
+                    )?,
+                    (policy_params.target_liquidity_depth_coverage_bps
+                        - policy_params.min_liquidity_depth_coverage_bps)
+                        as u128,
+                )?,
+                BPS,
+            )
+        };
         let volatility_health_bps = if snapshot.realized_volatility_bps
             >= policy_params.max_expansion_volatility_bps as u128
         {
@@ -2066,8 +4276,14 @@ fn evaluate_epoch(
         health_score_bps = min_u128(
             reserve_health_bps,
             min_u128(
-                volatility_health_bps,
-                min_u128(exit_health_bps, locked_share_health_bps),
+                stable_cash_health_bps,
+                min_u128(
+                    liquidity_health_bps,
+                    min_u128(
+                        volatility_health_bps,
+                        min_u128(exit_health_bps, locked_share_health_bps),
+                    ),
+                ),
             ),
         );
 
@@ -2117,6 +4333,18 @@ fn evaluate_epoch(
         policy_params.defense_reserve_coverage_bps as u128,
         reserve_coverage_bps,
     );
+    let stable_cash_stress_bps = positive_delta(
+        policy_params.defense_stable_cash_coverage_bps as u128,
+        stable_cash_coverage_bps,
+    );
+    let concentration_stress_bps = positive_delta(
+        external_metrics.largest_collateral_concentration_bps as u128,
+        policy_params.max_reserve_concentration_bps as u128,
+    );
+    let oracle_stress_bps = positive_delta(
+        external_metrics.oracle_confidence_bps as u128,
+        policy_params.max_oracle_confidence_bps as u128,
+    );
     let exit_stress_bps = positive_delta(
         exit_pressure_bps,
         policy_params.defense_exit_pressure_bps as u128,
@@ -2129,7 +4357,16 @@ fn evaluate_epoch(
         price_stress_bps,
         max_u128(
             coverage_stress_bps,
-            max_u128(exit_stress_bps, volatility_stress_bps),
+            max_u128(
+                stable_cash_stress_bps,
+                max_u128(
+                    concentration_stress_bps,
+                    max_u128(
+                        oracle_stress_bps,
+                        max_u128(exit_stress_bps, volatility_stress_bps),
+                    ),
+                ),
+            ),
         ),
     );
     if reserve_coverage_bps < policy_params.hard_defense_reserve_coverage_bps as u128 {
@@ -2176,6 +4413,8 @@ fn evaluate_epoch(
         buy_growth_bps,
         exit_pressure_bps,
         reserve_coverage_bps,
+        stable_cash_coverage_bps,
+        liquidity_depth_coverage_bps,
         locked_share_bps,
         lock_flow_bps,
         demand_score_bps,
@@ -2187,7 +4426,13 @@ fn evaluate_epoch(
         gross_buy_quote_x18,
         gross_sell_quote_x18,
         total_volume_quote_x18,
-        depth_to_target_slippage_quote_x18: external_metrics.depth_to_target_slippage_quote_x18,
+        depth_to_target_slippage_quote_x18: liquidity_depth_quote_x18,
+        stable_cash_reserve_quote_x18,
+        risk_weighted_reserve_quote_x18,
+        liquidity_depth_quote_x18,
+        largest_collateral_concentration_bps: external_metrics.largest_collateral_concentration_bps,
+        oracle_confidence_bps: external_metrics.oracle_confidence_bps,
+        stale_oracle_count: external_metrics.stale_oracle_count,
         realized_volatility_bps: snapshot.realized_volatility_bps,
         xagc_deposits_acp: flows.xagc_deposits_acp,
         xagc_gross_redemptions_acp: flows.xagc_gross_redemptions_acp,
@@ -2273,6 +4518,11 @@ fn persist_epoch_settlement(
     state.last_premium_bps = result.premium_bps;
     state.last_locked_share_bps = result.locked_share_bps;
     state.last_lock_flow_bps = result.lock_flow_bps;
+    state.last_stable_cash_coverage_bps = result.stable_cash_coverage_bps;
+    state.last_liquidity_depth_coverage_bps = result.liquidity_depth_coverage_bps;
+    state.last_reserve_concentration_bps = result.largest_collateral_concentration_bps as u128;
+    state.last_oracle_confidence_bps = result.oracle_confidence_bps as u128;
+    state.last_stale_oracle_count = result.stale_oracle_count;
     state.last_xagc_deposit_total = state.xagc_gross_deposits_total;
     state.last_xagc_redemption_total = state.xagc_gross_redemptions_total;
     state.last_epoch_result = result;
@@ -2432,6 +4682,66 @@ fn transfer_from_treasury<'info>(
     )
 }
 
+fn transfer_from_credit_facility_vault<'info>(
+    facility: &Account<'info, CreditFacility>,
+    source: &Account<'info, TokenAccount>,
+    destination: &Account<'info, TokenAccount>,
+    authority: &UncheckedAccount<'info>,
+    token_program: &Program<'info, Token>,
+    amount: u64,
+) -> Result<()> {
+    let facility_key = facility.key();
+    let bump = [facility.authority_bump];
+    let signer_seeds: &[&[u8]] = &[
+        CREDIT_FACILITY_AUTHORITY_SEED,
+        facility_key.as_ref(),
+        bump.as_ref(),
+    ];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            Transfer {
+                from: source.to_account_info(),
+                to: destination.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )
+}
+
+fn burn_from_credit_facility_vault<'info>(
+    facility: &Account<'info, CreditFacility>,
+    mint: &Account<'info, Mint>,
+    source: &Account<'info, TokenAccount>,
+    authority: &UncheckedAccount<'info>,
+    token_program: &Program<'info, Token>,
+    amount: u64,
+) -> Result<()> {
+    let facility_key = facility.key();
+    let bump = [facility.authority_bump];
+    let signer_seeds: &[&[u8]] = &[
+        CREDIT_FACILITY_AUTHORITY_SEED,
+        facility_key.as_ref(),
+        bump.as_ref(),
+    ];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    token::burn(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            Burn {
+                mint: mint.to_account_info(),
+                from: source.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2468,6 +4778,14 @@ mod tests {
             neutral_reserve_coverage_bps: 2_000,
             defense_reserve_coverage_bps: 1_500,
             hard_defense_reserve_coverage_bps: 800,
+            min_stable_cash_coverage_bps: 1_200,
+            target_stable_cash_coverage_bps: 2_500,
+            defense_stable_cash_coverage_bps: 800,
+            min_liquidity_depth_coverage_bps: 2_000,
+            target_liquidity_depth_coverage_bps: 5_000,
+            max_reserve_concentration_bps: 6_000,
+            max_oracle_confidence_bps: 150,
+            max_stale_oracle_count: 0,
             max_expansion_volatility_bps: 300,
             defense_volatility_bps: 1_000,
             max_expansion_exit_pressure_bps: 3_000,
@@ -2484,10 +4802,28 @@ mod tests {
         }
     }
 
+    fn metrics(
+        stable_cash: u128,
+        risk_weighted_reserve: u128,
+        liquidity_depth: u128,
+    ) -> ExternalMetrics {
+        ExternalMetrics {
+            depth_to_target_slippage_quote_x18: liquidity_depth,
+            stable_cash_reserve_quote_x18: stable_cash,
+            risk_weighted_reserve_quote_x18: risk_weighted_reserve,
+            liquidity_depth_quote_x18: liquidity_depth,
+            largest_collateral_concentration_bps: 4_500,
+            oracle_confidence_bps: 25,
+            stale_oracle_count: 0,
+        }
+    }
+
     fn test_state() -> ProtocolState {
         ProtocolState {
             admin: Pubkey::default(),
             pending_admin: Pubkey::default(),
+            risk_admin: Pubkey::default(),
+            emergency_admin: Pubkey::default(),
             agc_mint: Pubkey::default(),
             xagc_mint: Pubkey::default(),
             usdc_mint: Pubkey::default(),
@@ -2526,6 +4862,11 @@ mod tests {
             last_premium_bps: 0,
             last_locked_share_bps: 0,
             last_lock_flow_bps: 0,
+            last_stable_cash_coverage_bps: 0,
+            last_liquidity_depth_coverage_bps: 0,
+            last_reserve_concentration_bps: 0,
+            last_oracle_confidence_bps: 0,
+            last_stale_oracle_count: 0,
             last_settled_epoch: 0,
             last_settlement_timestamp: 0,
             recovery_cooldown_epochs_remaining: 0,
@@ -2538,6 +4879,13 @@ mod tests {
             last_xagc_deposit_total: 0,
             last_xagc_redemption_total: 0,
             buyback_execution_nonce: 0,
+            protocol_version: 2,
+            credit_facility_count: 0,
+            credit_principal_outstanding_agc: 0,
+            credit_drawn_agc: 0,
+            credit_repaid_agc: 0,
+            credit_interest_paid_agc: 0,
+            credit_defaulted_agc: 0,
             accumulator: EpochAccumulator {
                 epoch_id: 1,
                 started_at: 1_000,
@@ -2554,6 +4902,106 @@ mod tests {
                 total_hook_fees_agc: 0,
             },
             last_epoch_result: EpochResult::default(),
+        }
+    }
+
+    fn credit_facility_config() -> CreditFacilityConfig {
+        CreditFacilityConfig {
+            max_total_debt_agc: 1_000_000 * 1_000_000_000,
+            max_line_debt_agc: 500_000 * 1_000_000_000,
+            min_collateral_health_bps: 20_000,
+            liquidation_health_bps: 14_000,
+            min_underwriter_reserve_bps: 1_000,
+            interest_rate_bps: 1_200,
+            origination_fee_bps: 50,
+            default_grace_seconds: SECONDS_PER_DAY,
+            isolated: false,
+            enabled: true,
+        }
+    }
+
+    fn credit_collateral_asset() -> CollateralAsset {
+        CollateralAsset {
+            mint: Pubkey::new_unique(),
+            mint_decimals: 9,
+            oracle_feed: Pubkey::new_unique(),
+            reserve_token_account: Pubkey::new_unique(),
+            asset_class: AssetClass::Btc,
+            reserve_weight_bps: 6_000,
+            collateral_factor_bps: 5_000,
+            liquidation_threshold_bps: 6_500,
+            max_concentration_bps: 4_000,
+            max_oracle_staleness_seconds: 120,
+            max_oracle_confidence_bps: 100,
+            enabled: true,
+            bump: 0,
+        }
+    }
+
+    fn credit_oracle(asset: &CollateralAsset, updated_at: u64) -> CollateralOracle {
+        CollateralOracle {
+            mint: asset.mint,
+            oracle_feed: asset.oracle_feed,
+            price_quote_x18: PRICE_SCALE,
+            confidence_bps: 25,
+            updated_at,
+            bump: 0,
+            reserved: [0; 64],
+        }
+    }
+
+    fn credit_facility(asset: &CollateralAsset) -> CreditFacility {
+        CreditFacility {
+            facility_id: 1,
+            collateral_mint: asset.mint,
+            collateral_asset: Pubkey::new_unique(),
+            collateral_vault: Pubkey::new_unique(),
+            underwriter_vault_agc: Pubkey::new_unique(),
+            collateral_decimals: asset.mint_decimals,
+            config: credit_facility_config(),
+            status: CreditFacilityStatus::Active,
+            underwriter_total_shares: 0,
+            total_principal_debt_agc: 0,
+            total_underwriter_deposits_agc: 0,
+            total_underwriter_withdrawals_agc: 0,
+            total_drawn_agc: 0,
+            total_repaid_principal_agc: 0,
+            total_interest_accrued_agc: 0,
+            total_interest_paid_agc: 0,
+            total_defaulted_agc: 0,
+            total_underwriter_loss_agc: 0,
+            total_collateral_deposited: 0,
+            total_collateral_seized: 0,
+            active_credit_lines: 0,
+            created_at: 0,
+            bump: 0,
+            authority_bump: 0,
+            collateral_vault_bump: 0,
+            underwriter_vault_bump: 0,
+            reserved: [0; 256],
+        }
+    }
+
+    fn credit_line(facility: Pubkey) -> CreditLine {
+        CreditLine {
+            facility,
+            borrower: Pubkey::new_unique(),
+            line_id: 1,
+            credit_limit_agc: 500_000 * 1_000_000_000,
+            principal_debt_agc: 0,
+            accrued_interest_agc: 0,
+            collateral_amount: 2_000 * 1_000_000_000,
+            maturity_timestamp: 10 * SECONDS_PER_DAY,
+            opened_at: 0,
+            last_accrued_at: 0,
+            defaulted_at: 0,
+            closed_at: 0,
+            status: CreditLineStatus::Active,
+            underwriter_loss_agc: 0,
+            uncovered_default_agc: 0,
+            collateral_seized: 0,
+            bump: 0,
+            reserved: [0; 128],
         }
     }
 
@@ -2599,9 +5047,11 @@ mod tests {
 
         let result = evaluate_epoch(
             snapshot,
-            ExternalMetrics {
-                depth_to_target_slippage_quote_x18: 600_000 * PRICE_SCALE,
-            },
+            metrics(
+                250_000 * PRICE_SCALE,
+                650_000 * PRICE_SCALE,
+                600_000 * PRICE_SCALE,
+            ),
             state,
             flows,
             params(),
@@ -2642,9 +5092,11 @@ mod tests {
 
         let result = evaluate_epoch(
             snapshot,
-            ExternalMetrics {
-                depth_to_target_slippage_quote_x18: 100_000 * PRICE_SCALE,
-            },
+            metrics(
+                90_000 * PRICE_SCALE,
+                100_000 * PRICE_SCALE,
+                100_000 * PRICE_SCALE,
+            ),
             state,
             VaultFlows::default(),
             params(),
@@ -2698,27 +5150,222 @@ mod tests {
         invalid_volatility_thresholds.defense_volatility_bps =
             invalid_volatility_thresholds.max_expansion_volatility_bps;
         assert!(validate_policy_params(invalid_volatility_thresholds).is_err());
+
+        let mut invalid_stable_cash_targets = params();
+        invalid_stable_cash_targets.min_stable_cash_coverage_bps =
+            invalid_stable_cash_targets.target_stable_cash_coverage_bps;
+        assert!(validate_policy_params(invalid_stable_cash_targets).is_err());
+    }
+
+    #[test]
+    fn collateral_asset_configs_are_guarded() {
+        let mut config = CollateralAssetConfig {
+            oracle_feed: Pubkey::new_unique(),
+            reserve_token_account: Pubkey::new_unique(),
+            asset_class: AssetClass::Btc,
+            reserve_weight_bps: 6_000,
+            collateral_factor_bps: 5_000,
+            liquidation_threshold_bps: 6_500,
+            max_concentration_bps: 4_000,
+            max_oracle_staleness_seconds: 60,
+            max_oracle_confidence_bps: 100,
+            enabled: true,
+        };
+        assert!(validate_collateral_asset_config(config).is_ok());
+
+        config.reserve_weight_bps = 10_001;
+        assert!(validate_collateral_asset_config(config).is_err());
+
+        config.reserve_weight_bps = 6_000;
+        config.collateral_factor_bps = 7_000;
+        assert!(validate_collateral_asset_config(config).is_err());
+
+        config.collateral_factor_bps = 5_000;
+        config.oracle_feed = Pubkey::default();
+        assert!(validate_collateral_asset_config(config).is_err());
+    }
+
+    #[test]
+    fn credit_facility_configs_are_guarded() {
+        let mut config = credit_facility_config();
+        assert!(validate_credit_facility_config(config, AssetClass::Btc).is_ok());
+
+        config.min_underwriter_reserve_bps = 0;
+        assert!(validate_credit_facility_config(config, AssetClass::Btc).is_err());
+
+        config = credit_facility_config();
+        config.max_line_debt_agc = config.max_total_debt_agc + 1;
+        assert!(validate_credit_facility_config(config, AssetClass::Btc).is_err());
+
+        config = credit_facility_config();
+        config.isolated = false;
+        assert!(validate_credit_facility_config(config, AssetClass::Rwa).is_err());
+
+        config.isolated = true;
+        assert!(validate_credit_facility_config(config, AssetClass::Rwa).is_ok());
+    }
+
+    #[test]
+    fn credit_draw_requires_collateral_and_underwriter_reserve() {
+        let asset = credit_collateral_asset();
+        let oracle = credit_oracle(&asset, 100);
+        let facility = credit_facility(&asset);
+        let line = credit_line(Pubkey::new_unique());
+
+        assert!(validate_credit_draw(
+            &line,
+            &facility,
+            &asset,
+            &oracle,
+            500 * 1_000_000_000,
+            100 * 1_000_000_000,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_ok());
+
+        assert!(validate_credit_draw(
+            &line,
+            &facility,
+            &asset,
+            &oracle,
+            500 * 1_000_000_000,
+            1,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+
+        let mut thin_line = credit_line(Pubkey::new_unique());
+        thin_line.collateral_amount = 100 * 1_000_000_000;
+        assert!(validate_credit_draw(
+            &thin_line,
+            &facility,
+            &asset,
+            &oracle,
+            500 * 1_000_000_000,
+            100 * 1_000_000_000,
+            PRICE_SCALE,
+            1_000_000_000,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn credit_interest_accrues_to_facility_accounting() {
+        let asset = credit_collateral_asset();
+        let mut facility = credit_facility(&asset);
+        let mut line = credit_line(Pubkey::new_unique());
+        line.principal_debt_agc = 1_000 * 1_000_000_000;
+        line.last_accrued_at = 0;
+
+        accrue_facility_line_interest(&mut line, &mut facility, SECONDS_PER_YEAR as u64).unwrap();
+
+        assert_eq!(line.accrued_interest_agc, 120 * 1_000_000_000);
+        assert_eq!(facility.total_interest_accrued_agc, 120 * 1_000_000_000);
+        assert_eq!(line.last_accrued_at, SECONDS_PER_YEAR as u64);
+    }
+
+    #[test]
+    fn credit_oracle_freshness_is_enforced() {
+        let asset = credit_collateral_asset();
+        let fresh_oracle = credit_oracle(&asset, 100);
+        assert!(validate_oracle_fresh(&asset, &fresh_oracle, 200).is_ok());
+
+        let stale_oracle = credit_oracle(&asset, 1);
+        assert!(validate_oracle_fresh(&asset, &stale_oracle, 200).is_err());
+    }
+
+    #[test]
+    fn stable_cash_or_oracle_breaks_prevent_expansion() {
+        let snapshot = EpochSnapshot {
+            epoch_id: 9,
+            started_at: 0,
+            ended_at: 3_600,
+            gross_buy_volume_quote_x18: 100_000 * PRICE_SCALE,
+            gross_sell_volume_quote_x18: 10_000 * PRICE_SCALE,
+            total_volume_quote_x18: 110_000 * PRICE_SCALE,
+            short_twap_price_x18: PRICE_SCALE * 104 / 100,
+            realized_volatility_bps: 50,
+            total_hook_fees_quote_x18: 0,
+            total_hook_fees_agc: 0,
+        };
+        let state = PolicyState {
+            anchor_price_x18: PRICE_SCALE,
+            premium_persistence_epochs: 1,
+            last_gross_buy_quote_x18: 50_000 * PRICE_SCALE,
+            minted_today_acp: 0,
+            last_regime: Regime::Neutral,
+            recovery_cooldown_epochs_remaining: 0,
+            float_supply_acp: 1_000_000_000_000_000,
+            treasury_quote_x18: 200_000 * PRICE_SCALE,
+            treasury_acp: 0,
+            xagc_total_assets_acp: 250_000_000_000_000,
+        };
+        let flows = VaultFlows {
+            xagc_deposits_acp: 20_000_000_000_000,
+            xagc_gross_redemptions_acp: 0,
+        };
+
+        let weak_cash = evaluate_epoch(
+            snapshot,
+            metrics(
+                20_000 * PRICE_SCALE,
+                650_000 * PRICE_SCALE,
+                600_000 * PRICE_SCALE,
+            ),
+            state,
+            flows,
+            params(),
+            1_000_000_000,
+        )
+        .unwrap();
+        assert_ne!(weak_cash.regime, Regime::Expansion);
+        assert_eq!(weak_cash.mint_budget_acp, 0);
+
+        let mut oracle_break = metrics(
+            250_000 * PRICE_SCALE,
+            650_000 * PRICE_SCALE,
+            600_000 * PRICE_SCALE,
+        );
+        oracle_break.oracle_confidence_bps = params().max_oracle_confidence_bps + 1;
+        let oracle_result = evaluate_epoch(
+            snapshot,
+            oracle_break,
+            state,
+            flows,
+            params(),
+            1_000_000_000,
+        )
+        .unwrap();
+        assert_eq!(oracle_result.regime, Regime::Defense);
     }
 
     #[test]
     fn keeper_permissions_are_role_scoped() {
         let permissions = KeeperPermissions {
             market_reporter: true,
+            oracle_reporter: false,
             epoch_settler: false,
             buyback_executor: true,
             treasury_burner: false,
+            credit_operator: false,
         };
 
         assert!(permissions.allows(RequiredKeeperPermission::ReportMarket));
+        assert!(!permissions.allows(RequiredKeeperPermission::ReportOracle));
         assert!(!permissions.allows(RequiredKeeperPermission::SettleEpoch));
         assert!(permissions.allows(RequiredKeeperPermission::ExecuteBuyback));
         assert!(!permissions.allows(RequiredKeeperPermission::BurnTreasury));
+        assert!(!permissions.allows(RequiredKeeperPermission::OperateCredit));
 
         let all_permissions = KeeperPermissions::all();
         assert!(all_permissions.allows(RequiredKeeperPermission::ReportMarket));
+        assert!(all_permissions.allows(RequiredKeeperPermission::ReportOracle));
         assert!(all_permissions.allows(RequiredKeeperPermission::SettleEpoch));
         assert!(all_permissions.allows(RequiredKeeperPermission::ExecuteBuyback));
         assert!(all_permissions.allows(RequiredKeeperPermission::BurnTreasury));
+        assert!(all_permissions.allows(RequiredKeeperPermission::OperateCredit));
     }
 
     #[test]
@@ -2834,9 +5481,11 @@ mod tests {
 
         let result = evaluate_epoch(
             snapshot,
-            ExternalMetrics {
-                depth_to_target_slippage_quote_x18: 500_000 * PRICE_SCALE,
-            },
+            metrics(
+                250_000 * PRICE_SCALE,
+                500_000 * PRICE_SCALE,
+                500_000 * PRICE_SCALE,
+            ),
             state,
             VaultFlows::default(),
             params(),
@@ -2884,9 +5533,11 @@ mod tests {
 
         let result = evaluate_epoch(
             snapshot,
-            ExternalMetrics {
-                depth_to_target_slippage_quote_x18: 600_000 * PRICE_SCALE,
-            },
+            metrics(
+                250_000 * PRICE_SCALE,
+                650_000 * PRICE_SCALE,
+                600_000 * PRICE_SCALE,
+            ),
             state,
             flows,
             params(),

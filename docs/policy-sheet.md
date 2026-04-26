@@ -44,6 +44,12 @@ Per epoch the simulator needs:
 - `grossSellQuoteX18`
 - `totalVolumeQuoteX18`
 - `depthToTargetSlippageQuoteX18`
+- `stableCashReserveQuoteX18`
+- `riskWeightedReserveQuoteX18`
+- `liquidityDepthQuoteX18`
+- `largestCollateralConcentrationBps`
+- `oracleConfidenceBps`
+- `staleOracleCount`
 - `realizedVolatilityBps`
 - `xagcDepositsAcp`
 - `xagcGrossRedemptionsAcp`
@@ -60,7 +66,9 @@ Definitions:
 - `netBuyPressureBps = netBuyQuoteX18 * BPS / creditOutstandingQuoteX18`
 - `buyGrowthBps = lastGrossBuyQuoteX18 == 0 ? 0 : max(grossBuyQuoteX18 - lastGrossBuyQuoteX18, 0) * BPS / lastGrossBuyQuoteX18`
 - `exitPressureBps = totalVolumeQuoteX18 == 0 ? 0 : grossSellQuoteX18 * BPS / totalVolumeQuoteX18`
-- `reserveCoverageBps = creditOutstandingQuoteX18 == 0 ? 0 : depthToTargetSlippageQuoteX18 * BPS / creditOutstandingQuoteX18`
+- `reserveCoverageBps = creditOutstandingQuoteX18 == 0 ? 0 : riskWeightedReserveQuoteX18 * BPS / creditOutstandingQuoteX18`
+- `stableCashCoverageBps = creditOutstandingQuoteX18 == 0 ? 0 : stableCashReserveQuoteX18 * BPS / creditOutstandingQuoteX18`
+- `liquidityDepthCoverageBps = creditOutstandingQuoteX18 == 0 ? 0 : liquidityDepthQuoteX18 * BPS / creditOutstandingQuoteX18`
 - `lockedShareBps = floatSupplyAcp == 0 ? 0 : xagcTotalAssetsAcp * BPS / floatSupplyAcp`
 - `xagcExitFeeAcp = xagcGrossRedemptionsAcp * xagcExitFeeBps / BPS`
 - `xagcNetRedemptionAcp = xagcGrossRedemptionsAcp - xagcExitFeeAcp`
@@ -104,6 +112,9 @@ Enter `Defense` if any are true:
 
 - `priceTwapX18 < stressedFloorX18`
 - `reserveCoverageBps < defenseReserveCoverageBps`
+- `stableCashCoverageBps < defenseStableCashCoverageBps`
+- `oracleConfidenceBps > maxOracleConfidenceBps`
+- `staleOracleCount > maxStaleOracleCount`
 - `realizedVolatilityBps >= defenseVolatilityBps`
 - `exitPressureBps >= defenseExitPressureBps`
 
@@ -126,6 +137,11 @@ Enter `Expansion` only if all are true:
 - `lockFlowBps > 0`
 - `lockedShareBps >= minLockedShareBps`
 - `reserveCoverageBps >= expansionReserveCoverageBps`
+- `stableCashCoverageBps >= minStableCashCoverageBps`
+- `liquidityDepthCoverageBps >= minLiquidityDepthCoverageBps`
+- `largestCollateralConcentrationBps <= maxReserveConcentrationBps`
+- `oracleConfidenceBps <= maxOracleConfidenceBps`
+- `staleOracleCount <= maxStaleOracleCount`
 - `realizedVolatilityBps <= maxExpansionVolatilityBps`
 - `exitPressureBps <= maxExpansionExitPressureBps`
 - `buyGrowthBps > 0`
@@ -136,7 +152,7 @@ Everything else is `Neutral`.
 
 Interpretation:
 
-- `reserveCoverageBps` between `neutralReserveCoverageBps` and `expansionReserveCoverageBps` means the system can operate, but it should not print new credit
+- `reserveCoverageBps` between `neutralReserveCoverageBps` and `expansionReserveCoverageBps` means the system can operate, but it does not print new credit
 
 ## 7. Premium Persistence
 
@@ -166,13 +182,15 @@ Demand score:
 Definitions:
 
 - `reserveHealthBps = reserveCoverageBps <= expansionReserveCoverageBps ? 0 : min((reserveCoverageBps - expansionReserveCoverageBps) * BPS / (targetReserveCoverageBps - expansionReserveCoverageBps), BPS)`
+- `stableCashHealthBps = stableCashCoverageBps <= minStableCashCoverageBps ? 0 : min((stableCashCoverageBps - minStableCashCoverageBps) * BPS / (targetStableCashCoverageBps - minStableCashCoverageBps), BPS)`
+- `liquidityDepthHealthBps = liquidityDepthCoverageBps <= minLiquidityDepthCoverageBps ? 0 : min((liquidityDepthCoverageBps - minLiquidityDepthCoverageBps) * BPS / (targetLiquidityDepthCoverageBps - minLiquidityDepthCoverageBps), BPS)`
 - `volatilityHealthBps = realizedVolatilityBps >= maxExpansionVolatilityBps ? 0 : (maxExpansionVolatilityBps - realizedVolatilityBps) * BPS / maxExpansionVolatilityBps`
 - `exitHealthBps = exitPressureBps >= maxExpansionExitPressureBps ? 0 : (maxExpansionExitPressureBps - exitPressureBps) * BPS / maxExpansionExitPressureBps`
 - `lockedShareHealthBps = min(lockedShareBps * BPS / targetLockedShareBps, BPS)`
 
 Health score:
 
-- `healthScoreBps = min(reserveHealthBps, volatilityHealthBps, exitHealthBps, lockedShareHealthBps)`
+- `healthScoreBps = min(reserveHealthBps, stableCashHealthBps, liquidityDepthHealthBps, volatilityHealthBps, exitHealthBps, lockedShareHealthBps)`
 
 ## 9. Minting
 
@@ -219,9 +237,12 @@ Definitions:
 
 - `priceStressBps = priceTwapX18 < stressedFloorX18 ? (stressedFloorX18 - priceTwapX18) * BPS / anchorPriceX18 : 0`
 - `coverageStressBps = reserveCoverageBps < defenseReserveCoverageBps ? defenseReserveCoverageBps - reserveCoverageBps : 0`
+- `stableCashStressBps = stableCashCoverageBps < defenseStableCashCoverageBps ? defenseStableCashCoverageBps - stableCashCoverageBps : 0`
+- `concentrationStressBps = largestCollateralConcentrationBps > maxReserveConcentrationBps ? largestCollateralConcentrationBps - maxReserveConcentrationBps : 0`
+- `oracleStressBps = oracleConfidenceBps > maxOracleConfidenceBps ? oracleConfidenceBps - maxOracleConfidenceBps : 0`
 - `exitStressBps = exitPressureBps > defenseExitPressureBps ? exitPressureBps - defenseExitPressureBps : 0`
 - `volStressBps = realizedVolatilityBps > defenseVolatilityBps ? realizedVolatilityBps - defenseVolatilityBps : 0`
-- `stressScoreBps = max(priceStressBps, coverageStressBps, exitStressBps, volStressBps)`
+- `stressScoreBps = max(priceStressBps, coverageStressBps, stableCashStressBps, concentrationStressBps, oracleStressBps, exitStressBps, volStressBps)`
 
 Severe stress override:
 
@@ -253,7 +274,7 @@ On redemption:
 Rules:
 
 - `feeAcp` goes to treasury
-- treasury should not aggressively sell fee AGC during stress
+- treasury does not aggressively sell fee AGC during stress
 
 For simulation, it is acceptable to input `xagcGrossRedemptionsAcp` directly instead of share counts.
 
@@ -291,6 +312,14 @@ Treasury AGC inventory does not count toward `floatSupplyAcp` until it is distri
 - `neutralReserveCoverageBps = 1200`
 - `defenseReserveCoverageBps = 1200`
 - `hardDefenseReserveCoverageBps = 800`
+- `minStableCashCoverageBps = 1200`
+- `targetStableCashCoverageBps = 2500`
+- `defenseStableCashCoverageBps = 800`
+- `minLiquidityDepthCoverageBps = 2000`
+- `targetLiquidityDepthCoverageBps = 5000`
+- `maxReserveConcentrationBps = 6000`
+- `maxOracleConfidenceBps = 150`
+- `maxStaleOracleCount = 0`
 - `maxExpansionVolatilityBps = 150`
 - `defenseVolatilityBps = 400`
 - `maxExpansionExitPressureBps = 1800`

@@ -1,0 +1,194 @@
+# Agent Credit Protocol Full AI Context
+
+AGC is a reserve-efficient credit protocol designed for Solana. The protocol creates a constructive "money printer": circulating AGC grows quickly when the balance sheet, collateral base, liquidity, credit demand, and oracle quality support it, and stops expanding or defends when those conditions weaken.
+
+AGC does not mint merely because spot price pumped or because a keeper reports buy pressure. Every expansion leaves the protocol with more assets, more revenue, or higher-quality credit claims than before.
+
+## Assets
+
+AGC is the circulating credit unit. It is liquid inventory for agents, applications, borrowers, and users.
+
+xAGC is the long-duration savings and upside share. It receives most expansion flow and later protocol revenue. It is non-rebasing, with value accruing through a higher AGC-per-xAGC exchange rate.
+
+USDC and USDT are defensive cash reserves. They support buybacks, exits, reserve coverage, and the primary AGC/USDC market.
+
+BTC wrappers are strategic reserve collateral. Each wrapper is a separate risk object with its own custody, bridge, oracle, mint authority, liquidity, and redemption assumptions.
+
+Tokenized stocks and RWAs are isolated collateral candidates. They start isolated because they carry issuer risk, market-hours gaps, legal restrictions, oracle risk, and liquidity cliffs.
+
+## Reserve Model
+
+The protocol registers collateral assets per mint. Each asset needs:
+
+- mint
+- oracle feed
+- asset class
+- reserve weight
+- collateral factor
+- liquidation threshold
+- max concentration
+- max oracle staleness
+- max oracle confidence
+- enabled flag
+
+USDC and USDT can have high reserve weights. BTC wrappers have lower reserve weights such as 50% to 70% at launch. RWAs have lower weights and isolated caps until proven.
+
+The policy tracks stable cash coverage separately from risk-weighted reserve coverage. Stable cash supports immediate defense. Risk-weighted reserves support broader expansion capacity.
+
+## Policy Model
+
+Expansion capacity is the minimum of several independent constraints:
+
+```text
+mint_capacity = min(
+  stable_cash_capacity,
+  risk_weighted_reserve_capacity,
+  liquidity_depth_capacity,
+  credit_demand_capacity,
+  oracle_safe_capacity,
+  epoch_cap,
+  daily_cap
+)
+```
+
+Expansion requires:
+
+- risk-weighted reserve coverage above the expansion threshold
+- stable cash coverage above the stable-cash threshold
+- AGC/USDC liquidity depth above the liquidity threshold
+- largest collateral concentration below cap
+- fresh oracle data
+- acceptable oracle confidence interval
+- persistent demand or premium
+- low volatility
+- low exit pressure
+- positive xAGC lock flow
+- hard epoch and daily mint caps
+
+Defense triggers:
+
+- price below stressed floor
+- risk-weighted reserve coverage below defense threshold
+- stable cash coverage below defense threshold
+- stale oracle count above cap
+- oracle confidence above cap
+- volatility above defense threshold
+- exit pressure above defense threshold
+
+## Solana Adapter Caveat
+
+Solana public pools can be traded through Jupiter, Phantom, wallets, and bots. Therefore, optional adapter flow cannot be treated as global demand.
+
+The Solana design allows public trading and makes issuance depend on reserves, collateral, oracles, liquidity depth, and credit quality. Adapter-reported flow is official-venue telemetry, not complete truth.
+
+## Credit Facilities
+
+Credit facilities are the borrower side of AGC. Each facility is bound to one collateral mint, one PDA collateral vault, one PDA AGC underwriter vault, debt caps, health thresholds, oracle limits, and pause controls.
+
+Flow:
+
+```text
+risk governance opens a facility
+-> underwriters deposit AGC as first-loss capital
+-> a borrower receives an approved credit line
+-> the borrower deposits collateral
+-> the borrower draws AGC inside collateral, facility, and reserve limits
+-> repayment burns principal and sends interest to underwriters
+-> default burns underwriter reserve and routes seized collateral to the configured reserve account
+```
+
+Draws fail when the line exceeds its limit, the facility exceeds total debt caps, collateral health is too low, the oracle cache is stale or low-confidence, or underwriter reserves are below the configured minimum.
+
+## Governance
+
+AGC governance is multisig-driven rather than token voting. The model is built for a live credit protocol: fast enough to reduce risk, constrained enough to avoid arbitrary control.
+
+Authority lanes:
+
+- Admin multisig: migration and high-level protocol configuration.
+- Risk multisig: policy params, collateral configs, reserve weights, mint caps, and distributions inside hard limits.
+- Emergency guardian: pauses minting, settlement, collateral updates, buybacks, and vault operations.
+- Upgrade multisig: high-threshold program upgrade authority.
+
+Risk-reducing actions can happen quickly. Risk-increasing actions are operationally delayed. The program enforces bounds so governance can tune parameters only inside a safe box.
+
+## Demand Path
+
+AGC demand comes from scarce access to credit capacity and ownership of the growth machine.
+
+Demand sources:
+
+- speculative demand for future reserve and credit capacity
+- agent working-capital balances
+- credit access requirements
+- xAGC ownership of expansion and revenue
+- underwriter yield from first-loss credit pools
+- BTC reserve upside
+- repaid-credit incentives
+
+The loop:
+
+```text
+AGC demand rises
+-> primary issuance or market demand adds reserves
+-> reserves and liquidity deepen
+-> credit capacity increases
+-> agents and borrowers use credit
+-> fees and repayments grow
+-> xAGC becomes more valuable
+-> confidence and AGC demand increase
+```
+
+## FOMO Design
+
+Good FOMO:
+
+- capped epoch issuance
+- rising primary issuance curve
+- xAGC fee and expansion index
+- credit access tiers
+- underwriter tranches
+- BTC reserve upside
+- rewards for repaid credit volume
+
+Bad FOMO:
+
+- emissions-only APY
+- minting because price pumped
+- unbounded rebases
+- fake buybacks
+- rewards for wash volume
+- opaque admin risk
+
+## Current Implementation
+
+The Solana program includes:
+
+- role-scoped keepers
+- no external mint freeze authority
+- two-step admin transfer
+- risk and emergency governance authorities
+- pause flags
+- buyback escrow constraints
+- policy parameter guardrails
+- collateral asset registry
+- risk-weighted reserve metrics
+- stable cash coverage
+- liquidity depth coverage
+- oracle confidence and staleness gates
+- collateral oracle cache accounts
+- credit facilities
+- borrower credit-line accounts
+- collateral vaults
+- repayment/default accounting
+- underwriter AGC vaults
+- PDA-signed collateral seizure
+- upgradeable program authority model with reserved account space
+
+Remaining before production:
+
+- direct Pyth or Switchboard oracle adapter validation
+- on-chain reserve valuation from actual token accounts
+- venue-specific atomic buyback executor
+- deployed frontend IDL/client wiring
+- isolated RWA rollout

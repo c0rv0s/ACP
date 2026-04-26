@@ -1,0 +1,33 @@
+# Agent Credit Protocol
+
+> AGC is a Solana-native reserve-efficient credit protocol. It expands circulating AGC only when reserves, collateral, liquidity, oracle quality, credit demand, and hard mint caps support expansion.
+
+Important notes:
+
+- AGC is not a hard-peg stablecoin.
+- xAGC is the long-duration savings and upside share.
+- USDC and USDT are defensive cash reserves.
+- BTC wrappers are strategic reserve collateral with haircuts.
+- Tokenized stocks and RWAs start isolated before they count in global reserve coverage.
+- Credit facilities mint AGC against approved collateral, underwriter reserve, debt caps, and oracle health.
+- Optional Solana swap adapters are telemetry, not complete global demand, because users can trade public pools through wallets and aggregators.
+
+## Human Docs
+
+- [Protocol docs](/docs): Human-readable docs page hosted in the frontend.
+- [Solana credit machine](/docs/solana-credit-machine.md): Markdown source for the updated AGC Solana design.
+
+## AI Docs
+
+- [Full AI context](/llms-full.txt): Single-file summary of the protocol thesis, reserve model, policy model, credit facilities, governance, demand path, and implementation status.
+
+## Source Files
+
+- [Solana program](https://github.com/c0rv0s/ACP/tree/master/solana/programs/agc_solana/src/lib.rs): Anchor program containing the Solana policy, vault, collateral registry, and credit facility implementation.
+- [Root README](https://github.com/c0rv0s/ACP/blob/master/README.md): Repository overview.
+- [Solana README](https://github.com/c0rv0s/ACP/blob/master/solana/README.md): Solana build and account notes.
+
+## Optional
+
+- [Landing page](/): Public product framing.
+- [Dashboard](/dashboard): Contract telemetry and transaction surface. Live actions require configured deployment addresses.

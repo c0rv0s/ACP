@@ -1,31 +1,37 @@
 # Agent Credit Protocol
 
-Agent Credit Protocol is a pre-launch v1 implementation of reserve-efficient onchain credit for autonomous markets.
+Agent Credit Protocol is a pre-launch implementation of reserve-efficient onchain credit for autonomous markets.
 
 The system is built around three assets:
 
 - `AGC`: the liquid credit asset agents hold as working capital
 - `xAGC`: the non-rebasing savings share that captures most expansion
-- `USDC`: the reserve and settlement asset
+- `USDC` / `USDT`: defensive stablecoin reserve and settlement assets
+- BTC wrappers: strategic reserve collateral with haircuts
+- RWAs / tokenized stocks: later isolated collateral candidates
 
-The protocol does not target a hard peg. Policy tries to keep `AGC` inside a stable operating range, expand supply when demand and reserve conditions are strong, and defend with fees plus treasury buybacks when conditions weaken.
+The protocol does not target a hard peg. Policy keeps `AGC` inside a stable operating range, expands supply when balance-sheet conditions are strong, and defends with pauses, fees, and treasury buybacks when conditions weaken.
 
-## Current V1 Architecture
+The current Solana target is a balance-sheet credit machine rather than a swap-volume printer:
 
-- [`/Users/nate/Desktop/agc/src/AGCToken.sol`](/Users/nate/Desktop/agc/src/AGCToken.sol)
-  Role-gated `AGC` token with mint and burn permissions.
-- [`/Users/nate/Desktop/agc/src/XAGCVault.sol`](/Users/nate/Desktop/agc/src/XAGCVault.sol)
-  Non-rebasing vault-share token for locked `AGC`, with an exit fee routed to treasury.
-- [`/Users/nate/Desktop/agc/src/StabilityVault.sol`](/Users/nate/Desktop/agc/src/StabilityVault.sol)
-  Treasury inventory for `USDC` and protocol-held `AGC`.
-- [`/Users/nate/Desktop/agc/src/AGCHook.sol`](/Users/nate/Desktop/agc/src/AGCHook.sol)
-  Canonical Uniswap v4 hook tracking buy volume, sell volume, volatility, hook fees, and LP behavior.
-- [`/Users/nate/Desktop/agc/src/PolicyEngine.sol`](/Users/nate/Desktop/agc/src/PolicyEngine.sol)
-  Pure epoch math for expansion, defense, recovery, anchor crawl, and buyback budgets.
-- [`/Users/nate/Desktop/agc/src/PolicyController.sol`](/Users/nate/Desktop/agc/src/PolicyController.sol)
-  Epoch settlement, mint distribution, queued treasury buybacks, and regime state.
-- [`/Users/nate/Desktop/agc/src/SettlementRouter.sol`](/Users/nate/Desktop/agc/src/SettlementRouter.sol)
-  Direct user buy/sell flow against the canonical `AGC/USDC` pool, plus controller-driven treasury buybacks.
+```text
+AGC demand rises
+-> reserves and liquidity deepen
+-> credit capacity increases
+-> agents and borrowers use credit
+-> fees and repayments grow
+-> xAGC becomes more valuable
+-> confidence and AGC demand increase
+```
+
+## Current Architecture
+
+- [`/Users/nate/Desktop/agc/solana/programs/agc_solana/src/lib.rs`](/Users/nate/Desktop/agc/solana/programs/agc_solana/src/lib.rs)
+  Anchor program for AGC mint authority, xAGC vault accounting, treasury accounts, collateral registry, credit facilities, policy settlement, buyback budgeting, and governance roles.
+- [`/Users/nate/Desktop/agc/solana/README.md`](/Users/nate/Desktop/agc/solana/README.md)
+  Solana program build, account, governance, and hardening notes.
+- [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web)
+  Solana product site, operator dashboard, hosted docs, and AI-readable docs.
 
 ## Policy Model
 
@@ -59,15 +65,14 @@ There are no negative rebases in the normal path.
 
 ## Website
 
-The dashboard in [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web) is aligned to the current contracts and supports the full user interaction surface:
+The dashboard in [`/Users/nate/Desktop/agc/web`](/Users/nate/Desktop/agc/web) is the Solana operator surface for:
 
-- approve `USDC` for router buys
-- buy `AGC`
-- approve `AGC` for router sells
-- sell `AGC`
-- approve `AGC` for `xAGC`
-- deposit into `xAGC`
-- redeem `xAGC`
+- AGC market entry through Jupiter
+- xAGC deposits and redemptions
+- credit facility monitoring and transaction surfaces
+- policy telemetry
+- reserve and regime monitoring
+- hosted protocol docs
 
 It also shows live protocol state:
 
@@ -75,33 +80,28 @@ It also shows live protocol state:
 - regime
 - premium
 - reserve coverage
+- stable cash / risk reserve model notes
 - exit pressure
 - volatility
 - locked share
 - treasury inventory
 - `xAGC` assets and exchange rate
-- current hook epoch flow
+- current epoch flow
+- credit principal and facility state after deployment telemetry is wired
+- human docs at `/docs`
+- AI-readable docs at `/llms.txt` and `/llms-full.txt`
 
 ## Local Development
 
 ```bash
-pnpm test
-pnpm generate:abis
 pnpm build:web
-pnpm deploy:local
+cd solana && anchor build
+cargo test --manifest-path solana/programs/agc_solana/Cargo.toml --lib
 ```
-
-`pnpm deploy:local`:
-
-- deploys the v1 contract set
-- mines a valid Uniswap v4 hook address
-- initializes the canonical pool around the `0.50` launch anchor
-- seeds treasury `USDC`, user inventory, and initial `xAGC`
-- writes [`/Users/nate/Desktop/agc/deployments/local.json`](/Users/nate/Desktop/agc/deployments/local.json)
-- writes [`/Users/nate/Desktop/agc/web/.env.local`](/Users/nate/Desktop/agc/web/.env.local)
 
 ## Planning Docs
 
+- Solana credit-machine design: [`/Users/nate/Desktop/agc/docs/solana-credit-machine.md`](/Users/nate/Desktop/agc/docs/solana-credit-machine.md)
 - Rewrite spec: [`/Users/nate/Desktop/agc/docs/rewrite-spec.md`](/Users/nate/Desktop/agc/docs/rewrite-spec.md)
 - Policy sheet: [`/Users/nate/Desktop/agc/docs/policy-sheet.md`](/Users/nate/Desktop/agc/docs/policy-sheet.md)
 - Launch model config: [`/Users/nate/Desktop/agc/configs/policy/acp-launch-model.json`](/Users/nate/Desktop/agc/configs/policy/acp-launch-model.json)

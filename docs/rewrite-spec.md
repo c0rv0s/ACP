@@ -4,29 +4,29 @@ This is the clean-slate pre-launch spec.
 
 This document uses `AGC` as the canonical ticker for Agent Credit Protocol.
 
-Current repo identifiers may still say `ACP`, but that should be treated as legacy naming rather than the target product language.
+Current repo identifiers may still say `ACP`, but treat that as legacy naming rather than the target product language.
 
 ## 1. Core Framing
 
-AGC should not be framed primarily as:
+AGC is not framed primarily as:
 
 - a token you hold briefly before swapping to `USDC`
 - a checkout reward coin
 - a disguised dollar stablecoin
 
-AGC should be framed as:
+AGC is framed as:
 
 - reserve-efficient private credit for the agent economy
 - a synthetic monetary layer that expands against liquidity the way banking systems expand credit against reserves
-- a floating credit asset whose policy tries to maximize credit outstanding while keeping withdrawals absorbable
+- a floating credit asset whose policy maximizes credit outstanding while keeping withdrawals absorbable
 
 Internal mental model:
 
 - the pool liquidity is the reserve base
 - the circulating AGC float is credit outstanding
 - selling AGC is a withdrawal request
-- policy should expand credit when reserve conditions and demand allow it
-- policy should contract or defend when reserve coverage weakens
+- policy expands credit when reserve conditions and demand allow it
+- policy contracts or defends when reserve coverage weakens
 
 This is much closer to fractional reserve banking than to a stablecoin with full backing.
 
@@ -34,11 +34,13 @@ This is much closer to fractional reserve banking than to a stablecoin with full
 
 AGC is a reserve-efficient credit asset for agents: the protocol expands AGC against available liquidity and real demand, keeps the market inside a stable working range, and lets long-term holders capture the upside through `xAGC`.
 
-Short version:
+Updated short version:
 
 - `AGC` = circulating credit
 - `xAGC` = savings / equity-like claim on growth
-- `USDC` = settlement and reserve asset
+- `USDC` / `USDT` = defensive cash reserves
+- BTC wrappers = strategic reserve collateral with haircuts
+- tokenized stocks / RWAs = later isolated collateral
 
 ## 3. What The Protocol Is Trying To Maximize
 
@@ -52,7 +54,7 @@ Define:
 - `ReserveBase = USDC exit liquidity at target slippage`
 - `ReserveEfficiency = CreditOutstanding / ReserveBase`
 
-The system should try to make `ReserveEfficiency` as high as possible while keeping:
+The system makes `ReserveEfficiency` as high as possible while keeping:
 
 - price stability inside the target band
 - orderly exits
@@ -109,9 +111,9 @@ That gives the protocol two holder stories:
 
 ### 4.2.1 How `xAGC` accrues value
 
-`xAGC` should not be a rebasing token.
+`xAGC` is not a rebasing token.
 
-It should work like a vault share:
+It works like a vault share:
 
 - users deposit AGC
 - the vault mints `xAGC` shares
@@ -149,20 +151,20 @@ Why:
 
 Treasury handling rule:
 
-- treasury should not dump redemption-fee AGC immediately during stress
+- treasury does not dump redemption-fee AGC immediately during stress
 - it can hold AGC, market-make with it, or gradually convert part of it into `USDC` during healthy regimes
 
-Contraction should mostly be handled by:
+Contraction is mostly handled by:
 
 - halted issuance
 - defense fees
 - treasury buybacks and burns
 
-Only in true insolvency-style scenarios should the protocol even consider forcing downside into the `xAGC` layer, and that should be treated as exceptional recapitalization, not routine policy.
+Only in true insolvency-style scenarios does the protocol consider forcing downside into the `xAGC` layer, and that is exceptional recapitalization, not routine policy.
 
-### 4.3 `USDC`
+### 4.3 Cash reserves
 
-Settlement and reserve asset.
+Settlement and reserve assets.
 
 Use cases:
 
@@ -170,7 +172,15 @@ Use cases:
 - treasury defense asset
 - the practical withdrawal venue
 
-`USDC` is a reserve buffer, not full backing.
+`USDC` and `USDT` are reserve buffers, not full backing. They have separate issuer, concentration, oracle, and depeg risk limits.
+
+### 4.4 BTC and strategic reserves
+
+BTC wrappers can be useful because they add strategic reserve upside. They are not treated as cash. Each wrapper must be onboarded separately with a haircut, oracle, concentration cap, and liquidity assumptions.
+
+### 4.5 RWAs and tokenized stocks
+
+Tokenized stocks, treasuries, funds, and other RWAs are future collateral candidates. They start in isolated credit pools before they count toward global reserve coverage because they carry issuer risk, market-hours gaps, legal restrictions, and liquidity cliffs.
 
 ## 5. Demand Sources
 
@@ -214,7 +224,7 @@ So the launch anchor can be:
 
 or something else entirely.
 
-The choice should be made for narrative and psychology, not because the protocol has any natural right to sit at one dollar.
+The choice is made for narrative and psychology, not because the protocol has any natural right to sit at one dollar.
 
 Recommended design principle:
 
@@ -230,7 +240,7 @@ Start with:
 
 The anchor is soft and crawling.
 
-It should follow a smoothed clearing price of real demand, not raw spot speculation.
+It follows a smoothed clearing price of real demand, not raw spot speculation.
 
 Anchor source:
 
@@ -294,7 +304,7 @@ Expansion must require all three classes of evidence:
 - real buying
 - real locking
 
-If one leg is missing, the mint should stay small or go to zero.
+If one leg is missing, the mint stays small or goes to zero.
 
 Interpretation:
 
@@ -304,7 +314,7 @@ Interpretation:
 
 This is enough for launch.
 
-Transfer volume should not be a core policy input.
+Transfer volume is not a core policy input.
 
 Why not:
 
@@ -365,7 +375,7 @@ Enter expansion only if all are true:
 
 This is intentionally strict.
 
-The protocol should only print more private credit when the market is clearly asking for it and the reserve base can support it.
+The protocol only prints more private credit when the market is clearly asking for it and the reserve base can support it.
 
 ### 9.4 Neutral
 
@@ -373,7 +383,7 @@ Everything else is neutral.
 
 ## 10. Expansion Rule
 
-Expansion should happen after the fact at the epoch boundary.
+Expansion happens after the fact at the epoch boundary.
 
 Never inline inside user swaps.
 
@@ -386,9 +396,9 @@ If users feel like their principal is being mutated in the swap path:
 - arbitrage quality gets worse
 - the demand signal becomes corrupted
 
-The swap path should measure.
+The swap path measures.
 
-The controller should decide later.
+The controller decides later.
 
 ### 10.2 Demand score
 
@@ -431,7 +441,7 @@ with hard caps:
 
 This is the money-creation engine.
 
-It should be viewed exactly that way.
+It is viewed exactly that way.
 
 ## 11. Expansion Distribution
 
@@ -460,7 +470,7 @@ If the protocol does not primarily pay the equity-like upside layer, then the ho
 
 ## 12. Contraction Rule
 
-Contraction should not mean negative rebasing every holder.
+Contraction does not mean negative rebasing every holder.
 
 That is not needed.
 
@@ -512,7 +522,7 @@ xAGC needs:
 
 ## 14. Why This Can Actually Get Big
 
-The system becomes large if it behaves like reserve-efficient private credit for agents.
+The system becomes large if it behaves like reserve-efficient private credit for agents and if each expansion leaves the protocol with more assets, revenue, or high-quality credit claims.
 
 That means:
 
@@ -558,11 +568,11 @@ The holder gets paid through xAGC.
 
 ## 16. Demand Attribution
 
-The protocol should not depend on approved-route accounting as a core monetary input.
+The protocol does not depend on approved-route accounting as a core monetary input.
 
 That is too brittle and too easy to turn into a governance bottleneck.
 
-The policy engine should be able to operate on generic market observables:
+The policy engine operates on generic market observables:
 
 - price
 - premium persistence
@@ -574,7 +584,7 @@ The policy engine should be able to operate on generic market observables:
 
 If the protocol later wants marketing programs or partner incentives, those can exist as peripheral programs.
 
-They should not be required for the money engine to work.
+They are not required for the money engine to work.
 
 ## 17. Minimal Mechanical Design
 
@@ -599,7 +609,7 @@ These ideas are not sacred:
 - payment receipts as the main way value accrues
 - the assumption that the existing contracts define the right system boundaries
 
-What should be preserved is the deeper idea:
+The deeper preserved idea is:
 
 - floating credit
 - reserve-efficient issuance
@@ -628,10 +638,10 @@ Recommended starting posture:
 Why these reserve numbers:
 
 - `20%` coverage means the system is expanding against roughly `5x` reserve efficiency
-- `12%` coverage means the system is already leaning aggressive and should stop expanding
+- `12%` coverage means the system is already leaning aggressive and stops expanding
 - `8%` coverage means the system is in genuine defense territory
 
-That is aggressive enough to feel like private credit, but not so aggressive that the first real exit wave should kill confidence.
+That is aggressive enough to feel like private credit, but not so aggressive that the first real exit wave kills confidence.
 
 Recommended xAGC redemption friction:
 
@@ -653,7 +663,7 @@ That keeps the economic truth while avoiding the impression that the protocol is
 
 ## 21. Bottom Line
 
-AGC should be sold to ourselves as:
+AGC is sold to ourselves as:
 
 - the money-creation layer for the agent economy
 
@@ -673,4 +683,4 @@ The token price can be fifty cents or three dollars.
 
 That is not the essence.
 
-The essence is whether the protocol can safely create more circulating credit than the raw reserve base would suggest, and whether holders believe that machine can keep scaling.
+The essence is whether the protocol can safely create more circulating credit than the raw reserve base implies, and whether holders believe that machine can keep scaling.
