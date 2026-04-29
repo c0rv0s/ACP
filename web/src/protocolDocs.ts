@@ -142,11 +142,11 @@ export const protocolDocGroups: ProtocolDocGroup[] = [
         visual: "defense",
         body: [
           "Defense is the part of the system that matters most when conditions get ugly. If price falls below the stressed floor, stable cash gets too low, reserve coverage weakens, oracle data goes stale, volatility spikes, or exit pressure rises, expansion turns off.",
-          "Once defense is active, the protocol protects the balance sheet first. It can queue buybacks, burn treasury AGC, pause risky surfaces, and reduce risk limits until the system earns its way back to a healthier posture.",
+          "Once defense is active, the protocol protects the balance sheet first. It can queue buyback campaigns, burn treasury AGC, pause risky surfaces, and reduce risk limits until the system earns its way back to a healthier posture.",
         ],
         bullets: [
           "No expansion minting during defense.",
-          "Buybacks execute as atomic swap-and-burn through an approved executor.",
+          "Buyback campaigns release USDC in slices only after AGC has been delivered into the campaign vault and burned.",
           "Collateral can be disabled or haircut further.",
           "Recovery requires a cooldown before expansion can resume.",
         ],
@@ -232,6 +232,23 @@ export const protocolDocGroups: ProtocolDocGroup[] = [
           "Daily and epoch mint caps remain absolute supply limits even when every other signal is healthy.",
         ],
       },
+      {
+        id: "risk-presets",
+        title: "Launch collateral presets",
+        summary:
+          "USDC, USDT, and the first BTC wrapper enter with different haircuts because they protect the system in different ways.",
+        visual: "reserves",
+        body: [
+          "AGC starts with a simple collateral set: USDC as primary defensive cash, USDT as secondary defensive cash, and one highly liquid BTC wrapper as strategic reserve collateral.",
+          "The BTC wrapper is selected from live Solana liquidity and Pyth feed coverage during deployment prep. cbBTC is the current default candidate because it has Solana ecosystem support, but final selection follows liquidity, routing, oracle quality, and custody risk.",
+        ],
+        bullets: [
+          "USDC: 99% reserve weight, 90% collateral factor, 45% concentration cap.",
+          "USDT: 97% reserve weight, 85% collateral factor, 35% concentration cap.",
+          "BTC wrapper: 60% reserve weight, 45% collateral factor, 30% concentration cap.",
+          "RWAs begin isolated and disabled for global reserve coverage.",
+        ],
+      },
     ],
   },
   {
@@ -259,17 +276,68 @@ export const protocolDocGroups: ProtocolDocGroup[] = [
         id: "integration-oracles",
         title: "Oracle and reserve data",
         summary:
-          "Production reserve metrics come from verified oracle and vault integrations.",
+          "Collateral prices come from verified Pyth receiver updates, and reserve metrics are built around vault integrations.",
         visual: "integration",
         body: [
-          "The protocol does not treat a keeper's spreadsheet as the balance sheet. Reserve values come from actual token accounts and verified price feeds, with freshness and confidence checks before they count toward expansion.",
+          "The protocol does not treat a keeper's spreadsheet as the balance sheet. Pyth-backed collateral uses verified receiver price updates, with feed identity, freshness, confidence, and quote conversion checked before the price counts for credit.",
           "Market-volume adapters can still provide useful venue telemetry, but they are not the source of truth for global demand. On Solana, users can trade through wallets, aggregators, and bots, so AGC policy is anchored in reserves, liquidity, oracles, and credit quality.",
         ],
         bullets: [
           "Stale oracle prices do not count toward expansion.",
           "One wrapped BTC or RWA mint cannot dominate the reserve base.",
           "Adapter-reported volume is telemetry, not global truth.",
-          "Buybacks swap and burn atomically through approved executors.",
+          "Buyback USDC only leaves campaign escrow after AGC is burned.",
+        ],
+      },
+      {
+        id: "buyback-adapter",
+        title: "Raydium buyback adapter",
+        summary:
+          "The adapter handles market execution while the program enforces the burn-before-USDC-release invariant.",
+        visual: "defense",
+        body: [
+          "The first adapter is designed around Raydium execution because AGC is expected to launch where Solana liquidity is deepest. The route can be selected offchain, which gives operators room to avoid obvious one-shot swaps.",
+          "The safety boundary stays onchain. A buyback campaign escrows USDC, receives AGC into the campaign vault, burns AGC, and only then releases the matching USDC slice to the configured adapter destination.",
+        ],
+        bullets: [
+          "Slices are capped by campaign size and interval.",
+          "Each slice has minimum AGC output and deadline checks.",
+          "USDC cannot leave campaign escrow unless AGC is burned first.",
+          "The same campaign primitive can support better venues later without redesigning defense.",
+        ],
+      },
+      {
+        id: "user-examples",
+        title: "User examples",
+        summary:
+          "The main user paths are liquid AGC holding, xAGC locking, underwriting, borrowing, and defense-event inspection.",
+        visual: "vault",
+        body: [
+          "A holder buys AGC through normal Solana routes, keeps some liquid, and locks the rest into xAGC for longer-duration exposure to expansion.",
+          "An underwriter deposits AGC into a facility reserve and earns spread for taking first-loss risk. A borrower deposits approved collateral and draws AGC inside a facility limit. During stress, holders can inspect buyback campaigns and see AGC burned before USDC leaves escrow.",
+        ],
+        bullets: [
+          "AGC is liquid credit inventory.",
+          "xAGC is the expansion-share position.",
+          "Underwriters back specific credit sleeves.",
+          "Borrowers use collateral to access AGC without selling long-term assets.",
+        ],
+      },
+      {
+        id: "upgrade-runbook",
+        title: "Upgrade and migration runbook",
+        summary:
+          "The program is upgradeable, but upgrades are treated as a governed production control surface.",
+        visual: "governance",
+        body: [
+          "AGC is upgradeable so the protocol can evolve. That power belongs behind a production multisig, with runtime admin, risk, emergency, and keeper authorities separated inside protocol state.",
+          "Every upgrade requires a clean build, tests, IDL diff, account-size review, devnet simulation, multisig execution, and post-upgrade smoke checks. When behavior is unclear, the protocol pauses risky surfaces before resuming growth.",
+        ],
+        bullets: [
+          "Account migrations use explicit versioning.",
+          "Risky surfaces can be paused before and after upgrade execution.",
+          "Rollback is another controlled upgrade, not an assumption.",
+          "Upgrade notes explain behavior changes in public-facing language.",
         ],
       },
     ],
@@ -278,4 +346,4 @@ export const protocolDocGroups: ProtocolDocGroup[] = [
 
 export const flatProtocolDocs = protocolDocGroups.flatMap((group) => group.pages);
 
-export const docsUpdatedAt = "2026-04-26";
+export const docsUpdatedAt = "2026-04-27";

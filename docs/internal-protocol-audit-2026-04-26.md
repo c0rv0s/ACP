@@ -6,7 +6,7 @@ This pass reviewed the current Anchor implementation, account constraints, credi
 
 ## Result
 
-The foundation is stronger after this pass, but it is not yet production complete. The core policy and credit math now have better adversarial coverage, and two credit-lifecycle bugs were fixed. The largest remaining risks are integration-level: verified oracle adapters, on-chain reserve aggregation, atomic buyback execution, and validator-backed tests against real SPL token accounts.
+The foundation is stronger after this pass, but it is not yet production complete. The core policy and credit math now have better adversarial coverage, two credit-lifecycle bugs were fixed, Pyth-backed collateral oracle refresh is implemented, and buyback defense now runs through constrained campaign escrows. The largest remaining risks are integration-level: on-chain reserve aggregation, local-validator coverage, deployed client wiring, and external security review.
 
 ## Fixed Findings
 
@@ -29,6 +29,14 @@ Fix:
 - Matured-past-grace defaults no longer require a fresh oracle.
 - Immature defaults still require fresh oracle data and health below liquidation threshold.
 
+### Collateral oracle prices were keeper-reported
+
+Pyth collateral assets no longer accept arbitrary keeper price numbers. `refresh_collateral_oracle_from_pyth` validates the configured Pyth receiver program, `PriceUpdateV2` account discriminator, full verification level, feed id, publish time, staleness window, confidence, and quote x18 conversion before updating the cache used by credit draws.
+
+### Defense buybacks were raw USDC transfers
+
+The legacy reserve-transfer instruction is disabled. Buyback budgets now move into PDA-owned campaign escrows. Each TWAP slice burns delivered AGC and only then releases the corresponding USDC to the configured adapter account, with slice size, cadence, deadline, and min-output checks.
+
 ## Adversarial Tests Added
 
 - Disabled collateral cannot support credit draws.
@@ -39,6 +47,10 @@ Fix:
 - Matured defaults proceed even if the oracle is stale.
 - Immature defaults require both fresh oracle data and bad health.
 - Reserve concentration blocks expansion even when demand signals are strong.
+- Pyth collateral config requires a receiver program and feed id.
+- Pyth price conversion, confidence math, and account discriminator checks are covered.
+- Buyback campaign config rejects zero budgets, overfunding, bad slice limits, and expired windows.
+- Buyback slices enforce cadence, deadlines, max size, and AGC burn output.
 
 ## Existing Coverage Revalidated
 
@@ -58,9 +70,8 @@ Fix:
 
 ## Remaining Production Blockers
 
-- Direct Pyth or Switchboard validation for collateral oracle cache updates.
 - On-chain reserve aggregation from configured reserve token accounts.
-- Atomic buyback executor that swaps escrowed USDC and burns AGC in one controlled flow.
+- Optional venue-specific CPI adapters around the buyback campaign primitive.
 - Local-validator integration tests for SPL token transfers, burns, mints, PDA signer paths, account constraints, and pause flags.
 - Deployment-runbook tests for multisig authority migration and emergency operations.
 - External Solana security review after the integration suite exists.

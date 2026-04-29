@@ -54,6 +54,8 @@ Expansion requires healthy stable cash, risk-weighted reserve coverage, AGC/USDC
 
 Defense starts when price, reserve coverage, stable cash coverage, oracle health, volatility, or exit pressure breaks configured limits.
 
+Defense buybacks run through campaign escrows. The campaign holds USDC and an AGC burn vault, then releases USDC in slices only after AGC has been delivered and burned in the same instruction. Operators can route execution intelligently without turning defense funds into discretionary withdrawals.
+
 ## Credit Facilities
 
 Credit facilities are the borrower side of AGC. Each facility is tied to one collateral mint, one collateral reserve, one AGC first-loss reserve, debt caps, health thresholds, oracle limits, and pause controls.
@@ -71,6 +73,8 @@ risk governance opens a facility
 ```
 
 This is how AGC creates credit without pretending collateral does not matter. A draw creates AGC, but the other side of the balance sheet is visible: collateral in reserve, underwriter AGC behind the line, interest owed by the borrower, and liquidation rights if the line breaks.
+
+Pyth-backed collateral refreshes through verified Pyth receiver price-update accounts. The program checks the receiver owner, feed id, full verification status, staleness, confidence, and quote conversion before a price counts for credit.
 
 ## Governance
 
@@ -138,15 +142,15 @@ Under the hood, AGC does the following:
 - AGC/USDC remains the primary quote market.
 - Public DEX trading remains open through wallets, aggregators, and bots.
 - Adapter flow is official-venue telemetry, not complete demand truth.
-- Issuance depends on reserves, collateral, oracles, liquidity depth, and credit quality.
+- Issuance depends on reserves, collateral, Pyth-backed oracle data, liquidity depth, and credit quality.
 - PDAs control mint authority, treasury authority, and vault authority.
 - Collateral is registered per mint with weight, factor, threshold, concentration, and oracle controls.
 - Credit facilities use PDA collateral vaults, PDA underwriter AGC vaults, borrower credit-line accounts, interest accrual, repayment burns, default accounting, and collateral seizure.
 
 ## Implementation Status
 
-The Anchor program includes the core Solana protocol: xAGC vaults, policy settlement, collateral registry, oracle cache accounts, buyback escrow reservations, role-scoped keepers, separated governance authorities, and the credit facility layer.
+The Anchor program includes the core Solana protocol: xAGC vaults, policy settlement, collateral registry, Pyth-validated oracle cache accounts, constrained buyback campaign escrows, role-scoped keepers, separated governance authorities, and the credit facility layer.
 
-Production integration adds direct oracle adapters, reserve aggregation, a venue-specific atomic buyback executor, deployed IDL/client wiring, and isolated RWA onboarding.
+Production integration adds reserve aggregation, optional venue-specific CPI adapters around buyback campaigns, deployed IDL/client wiring, and isolated RWA onboarding.
 
 The program is upgradeable through the Solana upgradeable loader. Production upgrade authority sits behind a higher-threshold multisig, and the main protocol accounts include reserved space for future evolution.

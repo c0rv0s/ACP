@@ -5,7 +5,7 @@ description = "Solana implementation of Agent Credit Protocol core policy and va
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 name = "agc_solana"
 
 [features]

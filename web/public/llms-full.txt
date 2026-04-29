@@ -169,12 +169,13 @@ The Solana program includes:
 - two-step admin transfer
 - risk and emergency governance authorities
 - pause flags
-- buyback escrow constraints
+- constrained buyback campaign escrows
 - policy parameter guardrails
 - collateral asset registry
 - risk-weighted reserve metrics
 - stable cash coverage
 - liquidity depth coverage
+- Pyth receiver price-update validation
 - oracle confidence and staleness gates
 - collateral oracle cache accounts
 - credit facilities
@@ -187,8 +188,7 @@ The Solana program includes:
 
 Production integration roadmap:
 
-- direct Pyth or Switchboard oracle adapter validation
 - on-chain reserve valuation from actual token accounts
-- venue-specific atomic buyback executor
+- optional venue-specific CPI adapters around buyback campaigns
 - deployed frontend IDL/client wiring
 - isolated RWA rollout

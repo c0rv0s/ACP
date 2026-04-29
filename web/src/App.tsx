@@ -924,8 +924,8 @@ function DashboardPage() {
     ["Treasury USDC", shortKey(solanaAddresses.treasuryUsdc)],
     ["Credit facilities", "Collateralized AGC lines"],
     ["Underwriter vaults", "First-loss AGC reserves"],
-    ["Oracle cache", "Per collateral mint"],
-    ["Buyback path", "Escrowed swap and burn"],
+    ["Oracle cache", "Pyth per collateral mint"],
+    ["Buyback path", "TWAP campaign burn escrow"],
   ] as const;
 
   const txState =

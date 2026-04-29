@@ -22,10 +22,16 @@ const CREDIT_COLLATERAL_VAULT_SEED: &[u8] = b"credit-collateral-vault";
 const UNDERWRITER_VAULT_SEED: &[u8] = b"underwriter-vault";
 const UNDERWRITER_POSITION_SEED: &[u8] = b"underwriter-position";
 const CREDIT_LINE_SEED: &[u8] = b"credit-line";
+const BUYBACK_CAMPAIGN_SEED: &[u8] = b"buyback-campaign";
+const BUYBACK_CAMPAIGN_AUTHORITY_SEED: &[u8] = b"buyback-campaign-authority";
+const BUYBACK_CAMPAIGN_USDC_ESCROW_SEED: &[u8] = b"buyback-campaign-usdc";
+const BUYBACK_CAMPAIGN_AGC_VAULT_SEED: &[u8] = b"buyback-campaign-agc";
 
 const BPS: u128 = 10_000;
 const SECONDS_PER_DAY: u64 = 86_400;
 const SECONDS_PER_YEAR: u128 = 31_536_000;
+const PYTH_PRICE_UPDATE_V2_DISCRIMINATOR: [u8; 8] =
+    [0x22, 0xf1, 0x23, 0x63, 0x9d, 0x7e, 0xf4, 0xcd];
 
 #[program]
 pub mod agc_solana {
@@ -78,6 +84,7 @@ pub mod agc_solana {
         state.integrators_agc = args.settlement_recipients.integrators_agc;
         state.buyback_usdc_escrow = Pubkey::default();
         state.market_adapter_authority = Pubkey::default();
+        state.pyth_receiver_program = Pubkey::default();
         state.state_bump = ctx.bumps.state;
         state.mint_authority_bump = ctx.bumps.mint_authority;
         state.treasury_authority_bump = ctx.bumps.treasury_authority;
@@ -156,6 +163,19 @@ pub mod agc_solana {
         Ok(())
     }
 
+    pub fn set_pyth_receiver_program(
+        ctx: Context<SetPythReceiverProgram>,
+        receiver_program: Pubkey,
+    ) -> Result<()> {
+        require!(
+            receiver_program != Pubkey::default(),
+            AgcError::InvalidOraclePrice
+        );
+        ctx.accounts.state.pyth_receiver_program = receiver_program;
+        emit!(PythReceiverProgramUpdated { receiver_program });
+        Ok(())
+    }
+
     pub fn set_buyback_usdc_escrow(ctx: Context<SetBuybackUsdcEscrow>) -> Result<()> {
         ctx.accounts.state.buyback_usdc_escrow = ctx.accounts.buyback_usdc_escrow.key();
         emit!(BuybackUsdcEscrowUpdated {
@@ -181,9 +201,8 @@ pub mod agc_solana {
             ctx.accounts.state.pending_admin,
             AgcError::Unauthorized
         );
-        let previous_admin = ctx.accounts.state.admin;
-        ctx.accounts.state.admin = ctx.accounts.pending_admin.key();
-        ctx.accounts.state.pending_admin = Pubkey::default();
+        let previous_admin =
+            accept_admin_inner(&mut ctx.accounts.state, ctx.accounts.pending_admin.key())?;
         emit!(AdminTransferred {
             previous_admin,
             new_admin: ctx.accounts.state.admin,
@@ -273,12 +292,17 @@ pub mod agc_solana {
             AgcError::Paused
         );
         assert_risk_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
-        validate_collateral_asset_config(config)?;
+        validate_collateral_asset_config(config, ctx.accounts.state.pyth_receiver_program)?;
 
         let collateral_asset = &mut ctx.accounts.collateral_asset;
         collateral_asset.mint = ctx.accounts.mint.key();
         collateral_asset.mint_decimals = ctx.accounts.mint.decimals;
-        collateral_asset.oracle_feed = config.oracle_feed;
+        collateral_asset.oracle_source = config.oracle_source;
+        collateral_asset.oracle_feed = match config.oracle_source {
+            OracleSource::Manual => config.oracle_feed,
+            OracleSource::Pyth => ctx.accounts.state.pyth_receiver_program,
+        };
+        collateral_asset.pyth_price_feed_id = config.pyth_price_feed_id;
         collateral_asset.reserve_token_account = config.reserve_token_account;
         collateral_asset.asset_class = config.asset_class;
         collateral_asset.reserve_weight_bps = config.reserve_weight_bps;
@@ -311,6 +335,10 @@ pub mod agc_solana {
             ctx.accounts.authority.key(),
             ctx.accounts.keeper.to_account_info(),
         )?;
+        require!(
+            ctx.accounts.collateral_asset.oracle_source == OracleSource::Manual,
+            AgcError::InvalidOracleSource
+        );
         require!(price.price_quote_x18 > 0, AgcError::InvalidPrice);
         require!(
             price.confidence_bps <= ctx.accounts.collateral_asset.max_oracle_confidence_bps,
@@ -320,9 +348,68 @@ pub mod agc_solana {
         let oracle = &mut ctx.accounts.collateral_oracle;
         oracle.mint = ctx.accounts.mint.key();
         oracle.oracle_feed = ctx.accounts.collateral_asset.oracle_feed;
+        oracle.oracle_source = OracleSource::Manual;
+        oracle.pyth_price_feed_id = [0; 32];
         oracle.price_quote_x18 = price.price_quote_x18;
         oracle.confidence_bps = price.confidence_bps;
         oracle.updated_at = current_timestamp()?;
+        oracle.publish_time = oracle.updated_at;
+        oracle.bump = ctx.bumps.collateral_oracle;
+
+        emit!(CollateralOraclePriceUpdated {
+            mint: oracle.mint,
+            price_quote_x18: oracle.price_quote_x18,
+            confidence_bps: oracle.confidence_bps,
+            updated_at: oracle.updated_at,
+        });
+
+        Ok(())
+    }
+
+    pub fn refresh_collateral_oracle_from_pyth(
+        ctx: Context<RefreshCollateralOracleFromPyth>,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.collateral_updates_paused,
+            AgcError::Paused
+        );
+        require!(
+            ctx.accounts.collateral_asset.oracle_source == OracleSource::Pyth,
+            AgcError::InvalidOracleSource
+        );
+
+        let now = current_timestamp()?;
+        let price = read_verified_pyth_price(
+            ctx.accounts.price_update.to_account_info(),
+            ctx.accounts.state.pyth_receiver_program,
+            ctx.accounts.collateral_asset.pyth_price_feed_id,
+            ctx.accounts.collateral_asset.max_oracle_staleness_seconds,
+            now,
+        )?;
+        let price_quote_x18 = pyth_price_to_quote_x18(price.price, price.exponent)?;
+        let confidence_bps = pyth_confidence_bps(price.price, price.conf)?;
+        require!(
+            confidence_bps <= ctx.accounts.collateral_asset.max_oracle_confidence_bps,
+            AgcError::InvalidOraclePrice
+        );
+
+        let publish_time =
+            u64::try_from(price.publish_time).map_err(|_| error!(AgcError::InvalidOraclePrice))?;
+        let oracle = &mut ctx.accounts.collateral_oracle;
+        if oracle.mint != Pubkey::default() {
+            require!(
+                publish_time >= oracle.publish_time,
+                AgcError::InvalidOraclePrice
+            );
+        }
+        oracle.mint = ctx.accounts.mint.key();
+        oracle.oracle_feed = ctx.accounts.collateral_asset.oracle_feed;
+        oracle.oracle_source = OracleSource::Pyth;
+        oracle.pyth_price_feed_id = ctx.accounts.collateral_asset.pyth_price_feed_id;
+        oracle.price_quote_x18 = price_quote_x18;
+        oracle.confidence_bps = confidence_bps;
+        oracle.updated_at = publish_time;
+        oracle.publish_time = publish_time;
         oracle.bump = ctx.bumps.collateral_oracle;
 
         emit!(CollateralOraclePriceUpdated {
@@ -658,7 +745,8 @@ pub mod agc_solana {
             AgcError::Paused
         );
         require!(amount > 0, AgcError::ZeroAmount);
-        require_credit_line_allows_collateral_withdrawal(&ctx.accounts.credit_line)?;
+        let needs_health_check =
+            collateral_withdrawal_needs_health_check(&ctx.accounts.credit_line)?;
 
         let remaining_collateral = ctx
             .accounts
@@ -674,7 +762,7 @@ pub mod agc_solana {
                 &mut ctx.accounts.facility,
                 now,
             )?;
-            if collateral_withdrawal_needs_health_check(&ctx.accounts.credit_line)? {
+            if needs_health_check {
                 validate_oracle_fresh(
                     &ctx.accounts.collateral_asset,
                     &ctx.accounts.collateral_oracle,
@@ -1425,9 +1513,10 @@ pub mod agc_solana {
         Ok(())
     }
 
-    pub fn reserve_treasury_buyback_usdc(
-        ctx: Context<ReserveTreasuryBuybackUsdc>,
-        amount: u64,
+    pub fn start_buyback_campaign(
+        ctx: Context<StartBuybackCampaign>,
+        campaign_id: u64,
+        config: BuybackCampaignConfig,
     ) -> Result<()> {
         require!(
             !ctx.accounts.state.pause_flags.buybacks_paused,
@@ -1439,45 +1528,206 @@ pub mod agc_solana {
             ctx.accounts.keeper.to_account_info(),
             RequiredKeeperPermission::ExecuteBuyback,
         )?;
-        require!(amount > 0, AgcError::ZeroAmount);
-        let state = &mut ctx.accounts.state;
-        require!(
-            state.buyback_usdc_escrow != Pubkey::default(),
-            AgcError::BuybackEscrowNotConfigured
-        );
-        require_keys_eq!(
-            ctx.accounts.buyback_usdc_destination.key(),
-            state.buyback_usdc_escrow,
-            AgcError::InvalidBuybackEscrow
-        );
-        let spend = amount.min(state.pending_treasury_buyback_usdc);
-        require!(spend > 0, AgcError::NoPendingTreasuryBuyback);
+
+        let now = current_timestamp()?;
+        validate_buyback_campaign_config(
+            config,
+            ctx.accounts.state.pending_treasury_buyback_usdc,
+            now,
+        )?;
 
         transfer_from_treasury(
             &ctx.accounts.treasury_usdc,
-            &ctx.accounts.buyback_usdc_destination,
+            &ctx.accounts.campaign_usdc_escrow,
             &ctx.accounts.treasury_authority,
             &ctx.accounts.token_program,
-            state.treasury_authority_bump,
-            spend,
+            ctx.accounts.state.treasury_authority_bump,
+            config.total_usdc,
         )?;
 
+        let started_at = if config.start_after == 0 {
+            now
+        } else {
+            config.start_after
+        };
+        let campaign = &mut ctx.accounts.campaign;
+        campaign.campaign_id = campaign_id;
+        campaign.status = BuybackCampaignStatus::Active;
+        campaign.total_usdc = config.total_usdc;
+        campaign.remaining_usdc = config.total_usdc;
+        campaign.spent_usdc = 0;
+        campaign.min_total_agc_out = config.min_total_agc_out;
+        campaign.agc_burned = 0;
+        campaign.max_slice_usdc = config.max_slice_usdc;
+        campaign.slice_interval_seconds = config.slice_interval_seconds;
+        campaign.started_at = started_at;
+        campaign.expires_at = config.expires_at;
+        campaign.last_slice_at = 0;
+        campaign.slice_count = 0;
+        campaign.adapter_usdc_account = config.adapter_usdc_account;
+        campaign.usdc_escrow = ctx.accounts.campaign_usdc_escrow.key();
+        campaign.agc_vault = ctx.accounts.campaign_agc_vault.key();
+        campaign.bump = ctx.bumps.campaign;
+        campaign.authority_bump = ctx.bumps.campaign_authority;
+        campaign.usdc_escrow_bump = ctx.bumps.campaign_usdc_escrow;
+        campaign.agc_vault_bump = ctx.bumps.campaign_agc_vault;
+
+        let state = &mut ctx.accounts.state;
         state.pending_treasury_buyback_usdc = state
             .pending_treasury_buyback_usdc
-            .checked_sub(spend)
+            .checked_sub(config.total_usdc)
             .ok_or(AgcError::MathOverflow)?;
         state.buyback_execution_nonce = state
             .buyback_execution_nonce
             .checked_add(1)
             .ok_or(AgcError::MathOverflow)?;
 
-        emit!(TreasuryBuybackUsdcReserved {
-            nonce: state.buyback_execution_nonce,
-            usdc_spent: spend,
-            pending_treasury_buyback_usdc_after: state.pending_treasury_buyback_usdc,
+        emit!(BuybackCampaignStarted {
+            campaign: campaign.key(),
+            campaign_id,
+            total_usdc: config.total_usdc,
+            min_total_agc_out: config.min_total_agc_out,
+            adapter_usdc_account: config.adapter_usdc_account,
         });
 
         Ok(())
+    }
+
+    pub fn execute_buyback_twap_slice(
+        ctx: Context<ExecuteBuybackTwapSlice>,
+        args: BuybackSliceArgs,
+    ) -> Result<()> {
+        require!(
+            !ctx.accounts.state.pause_flags.buybacks_paused,
+            AgcError::Paused
+        );
+        assert_keeper_permission_or_admin(
+            &ctx.accounts.state,
+            ctx.accounts.authority.key(),
+            ctx.accounts.keeper.to_account_info(),
+            RequiredKeeperPermission::ExecuteBuyback,
+        )?;
+
+        let now = current_timestamp()?;
+        validate_buyback_slice(&ctx.accounts.campaign, args, now)?;
+        require!(
+            ctx.accounts.campaign_agc_vault.amount >= args.agc_amount_to_burn,
+            AgcError::InsufficientBuybackOutput
+        );
+
+        let remaining_after = ctx
+            .accounts
+            .campaign
+            .remaining_usdc
+            .checked_sub(args.usdc_amount)
+            .ok_or(AgcError::MathOverflow)?;
+        let burned_after = ctx
+            .accounts
+            .campaign
+            .agc_burned
+            .checked_add(args.agc_amount_to_burn)
+            .ok_or(AgcError::MathOverflow)?;
+        if remaining_after == 0 {
+            require!(
+                burned_after >= ctx.accounts.campaign.min_total_agc_out,
+                AgcError::InsufficientBuybackOutput
+            );
+        }
+
+        burn_from_buyback_campaign_vault(
+            ctx.accounts.campaign.campaign_id,
+            ctx.accounts.campaign.authority_bump,
+            &ctx.accounts.agc_mint,
+            &ctx.accounts.campaign_agc_vault,
+            &ctx.accounts.campaign_authority,
+            &ctx.accounts.token_program,
+            args.agc_amount_to_burn,
+        )?;
+        transfer_from_buyback_campaign_vault(
+            ctx.accounts.campaign.campaign_id,
+            ctx.accounts.campaign.authority_bump,
+            &ctx.accounts.campaign_usdc_escrow,
+            &ctx.accounts.adapter_usdc_destination,
+            &ctx.accounts.campaign_authority,
+            &ctx.accounts.token_program,
+            args.usdc_amount,
+        )?;
+
+        let campaign = &mut ctx.accounts.campaign;
+        campaign.remaining_usdc = remaining_after;
+        campaign.spent_usdc = campaign
+            .spent_usdc
+            .checked_add(args.usdc_amount)
+            .ok_or(AgcError::MathOverflow)?;
+        campaign.agc_burned = burned_after;
+        campaign.last_slice_at = now;
+        campaign.slice_count = campaign
+            .slice_count
+            .checked_add(1)
+            .ok_or(AgcError::MathOverflow)?;
+        if campaign.remaining_usdc == 0 {
+            campaign.status = BuybackCampaignStatus::Completed;
+        }
+
+        emit!(BuybackTwapSliceExecuted {
+            campaign: campaign.key(),
+            campaign_id: campaign.campaign_id,
+            usdc_amount: args.usdc_amount,
+            agc_burned: args.agc_amount_to_burn,
+            remaining_usdc: campaign.remaining_usdc,
+            total_agc_burned: campaign.agc_burned,
+        });
+
+        Ok(())
+    }
+
+    pub fn cancel_buyback_campaign(ctx: Context<CancelBuybackCampaign>) -> Result<()> {
+        assert_emergency_authority_or_admin(&ctx.accounts.state, ctx.accounts.authority.key())?;
+        require!(
+            ctx.accounts.campaign.status == BuybackCampaignStatus::Active,
+            AgcError::BuybackCampaignInactive
+        );
+
+        if ctx.accounts.campaign_agc_vault.amount > 0 {
+            burn_from_buyback_campaign_vault(
+                ctx.accounts.campaign.campaign_id,
+                ctx.accounts.campaign.authority_bump,
+                &ctx.accounts.agc_mint,
+                &ctx.accounts.campaign_agc_vault,
+                &ctx.accounts.campaign_authority,
+                &ctx.accounts.token_program,
+                ctx.accounts.campaign_agc_vault.amount,
+            )?;
+        }
+        if ctx.accounts.campaign_usdc_escrow.amount > 0 {
+            transfer_from_buyback_campaign_vault(
+                ctx.accounts.campaign.campaign_id,
+                ctx.accounts.campaign.authority_bump,
+                &ctx.accounts.campaign_usdc_escrow,
+                &ctx.accounts.treasury_usdc,
+                &ctx.accounts.campaign_authority,
+                &ctx.accounts.token_program,
+                ctx.accounts.campaign_usdc_escrow.amount,
+            )?;
+        }
+
+        let campaign = &mut ctx.accounts.campaign;
+        campaign.status = BuybackCampaignStatus::Cancelled;
+        campaign.remaining_usdc = 0;
+
+        emit!(BuybackCampaignCancelled {
+            campaign: campaign.key(),
+            campaign_id: campaign.campaign_id,
+        });
+
+        Ok(())
+    }
+
+    pub fn reserve_treasury_buyback_usdc(
+        _ctx: Context<ReserveTreasuryBuybackUsdc>,
+        _amount: u64,
+    ) -> Result<()> {
+        err!(AgcError::DeprecatedBuybackPath)
     }
 
     pub fn burn_treasury_agc(ctx: Context<BurnTreasuryAgc>, amount: u64) -> Result<()> {
@@ -1529,6 +1779,22 @@ fn set_keeper_permissions_inner(
     });
 
     Ok(())
+}
+
+fn accept_admin_inner(state: &mut ProtocolState, new_admin: Pubkey) -> Result<Pubkey> {
+    require!(new_admin != Pubkey::default(), AgcError::InvalidAdmin);
+
+    let previous_admin = state.admin;
+    state.admin = new_admin;
+    state.pending_admin = Pubkey::default();
+    if state.risk_admin == previous_admin {
+        state.risk_admin = new_admin;
+    }
+    if state.emergency_admin == previous_admin {
+        state.emergency_admin = new_admin;
+    }
+
+    Ok(previous_admin)
 }
 
 #[derive(Accounts)]
@@ -1611,6 +1877,13 @@ pub struct SetKeeper<'info> {
 
 #[derive(Accounts)]
 pub struct SetMarketAdapterAuthority<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub admin: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetPythReceiverProgram<'info> {
     #[account(mut, seeds = [STATE_SEED], bump = state.state_bump, has_one = admin)]
     pub state: Box<Account<'info, ProtocolState>>,
     pub admin: Signer<'info>,
@@ -1731,6 +2004,32 @@ pub struct SetCollateralOraclePrice<'info> {
         space = 8 + CollateralOracle::LEN
     )]
     pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RefreshCollateralOracleFromPyth<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub mint: Box<Account<'info, Mint>>,
+    #[account(
+        seeds = [COLLATERAL_ASSET_SEED, mint.key().as_ref()],
+        bump = collateral_asset.bump,
+        constraint = collateral_asset.mint == mint.key() @ AgcError::InvalidCollateralAssetConfig
+    )]
+    pub collateral_asset: Box<Account<'info, CollateralAsset>>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        seeds = [COLLATERAL_ORACLE_SEED, mint.key().as_ref()],
+        bump,
+        space = 8 + CollateralOracle::LEN
+    )]
+    pub collateral_oracle: Box<Account<'info, CollateralOracle>>,
+    /// CHECK: Validated by owner, Anchor discriminator, feed id, verification level, and timestamp.
+    pub price_update: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -2196,6 +2495,135 @@ pub struct SettleEpoch<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(campaign_id: u64)]
+pub struct StartBuybackCampaign<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    /// CHECK: Deserialized manually only when authority is not admin.
+    pub keeper: UncheckedAccount<'info>,
+    #[account(mut, address = state.treasury_usdc)]
+    pub treasury_usdc: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [BUYBACK_CAMPAIGN_SEED, campaign_id.to_le_bytes().as_ref()],
+        bump,
+        space = 8 + BuybackCampaign::LEN
+    )]
+    pub campaign: Box<Account<'info, BuybackCampaign>>,
+    /// CHECK: PDA only signs campaign token-account operations.
+    #[account(seeds = [BUYBACK_CAMPAIGN_AUTHORITY_SEED, campaign_id.to_le_bytes().as_ref()], bump)]
+    pub campaign_authority: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [BUYBACK_CAMPAIGN_USDC_ESCROW_SEED, campaign_id.to_le_bytes().as_ref()],
+        bump,
+        token::mint = usdc_mint,
+        token::authority = campaign_authority
+    )]
+    pub campaign_usdc_escrow: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [BUYBACK_CAMPAIGN_AGC_VAULT_SEED, campaign_id.to_le_bytes().as_ref()],
+        bump,
+        token::mint = agc_mint,
+        token::authority = campaign_authority
+    )]
+    pub campaign_agc_vault: Box<Account<'info, TokenAccount>>,
+    #[account(address = state.usdc_mint)]
+    pub usdc_mint: Box<Account<'info, Mint>>,
+    #[account(address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    /// CHECK: PDA only signs treasury token-account operations.
+    #[account(seeds = [TREASURY_AUTHORITY_SEED], bump = state.treasury_authority_bump)]
+    pub treasury_authority: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteBuybackTwapSlice<'info> {
+    #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+    /// CHECK: Deserialized manually only when authority is not admin.
+    pub keeper: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        seeds = [BUYBACK_CAMPAIGN_SEED, campaign.campaign_id.to_le_bytes().as_ref()],
+        bump = campaign.bump
+    )]
+    pub campaign: Box<Account<'info, BuybackCampaign>>,
+    #[account(
+        mut,
+        address = campaign.usdc_escrow,
+        constraint = campaign_usdc_escrow.mint == state.usdc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub campaign_usdc_escrow: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        address = campaign.agc_vault,
+        constraint = campaign_agc_vault.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub campaign_agc_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        address = campaign.adapter_usdc_account,
+        constraint = adapter_usdc_destination.mint == state.usdc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub adapter_usdc_destination: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    /// CHECK: PDA only signs campaign token-account operations.
+    #[account(
+        seeds = [BUYBACK_CAMPAIGN_AUTHORITY_SEED, campaign.campaign_id.to_le_bytes().as_ref()],
+        bump = campaign.authority_bump
+    )]
+    pub campaign_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct CancelBuybackCampaign<'info> {
+    #[account(seeds = [STATE_SEED], bump = state.state_bump)]
+    pub state: Box<Account<'info, ProtocolState>>,
+    pub authority: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [BUYBACK_CAMPAIGN_SEED, campaign.campaign_id.to_le_bytes().as_ref()],
+        bump = campaign.bump
+    )]
+    pub campaign: Box<Account<'info, BuybackCampaign>>,
+    #[account(
+        mut,
+        address = campaign.usdc_escrow,
+        constraint = campaign_usdc_escrow.mint == state.usdc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub campaign_usdc_escrow: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        address = campaign.agc_vault,
+        constraint = campaign_agc_vault.mint == state.agc_mint @ AgcError::InvalidTokenAccount
+    )]
+    pub campaign_agc_vault: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = state.treasury_usdc)]
+    pub treasury_usdc: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = state.agc_mint)]
+    pub agc_mint: Box<Account<'info, Mint>>,
+    /// CHECK: PDA only signs campaign token-account operations.
+    #[account(
+        seeds = [BUYBACK_CAMPAIGN_AUTHORITY_SEED, campaign.campaign_id.to_le_bytes().as_ref()],
+        bump = campaign.authority_bump
+    )]
+    pub campaign_authority: UncheckedAccount<'info>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
 pub struct ReserveTreasuryBuybackUsdc<'info> {
     #[account(mut, seeds = [STATE_SEED], bump = state.state_bump)]
     pub state: Box<Account<'info, ProtocolState>>,
@@ -2246,6 +2674,7 @@ pub struct ProtocolState {
     pub integrators_agc: Pubkey,
     pub buyback_usdc_escrow: Pubkey,
     pub market_adapter_authority: Pubkey,
+    pub pyth_receiver_program: Pubkey,
     pub state_bump: u8,
     pub mint_authority_bump: u8,
     pub treasury_authority_bump: u8,
@@ -2385,7 +2814,9 @@ pub struct PauseFlags {
 pub struct CollateralAsset {
     pub mint: Pubkey,
     pub mint_decimals: u8,
+    pub oracle_source: OracleSource,
     pub oracle_feed: Pubkey,
+    pub pyth_price_feed_id: [u8; 32],
     pub reserve_token_account: Pubkey,
     pub asset_class: AssetClass,
     pub reserve_weight_bps: u16,
@@ -2399,22 +2830,54 @@ pub struct CollateralAsset {
 }
 
 impl CollateralAsset {
-    pub const LEN: usize = 32 + 1 + 32 + 32 + 1 + 2 + 2 + 2 + 2 + 8 + 2 + 1 + 1 + 64;
+    pub const LEN: usize = 32 + 1 + 1 + 32 + 32 + 32 + 1 + 2 + 2 + 2 + 2 + 8 + 2 + 1 + 1 + 64;
 }
 
 #[account]
 pub struct CollateralOracle {
     pub mint: Pubkey,
     pub oracle_feed: Pubkey,
+    pub oracle_source: OracleSource,
+    pub pyth_price_feed_id: [u8; 32],
     pub price_quote_x18: u128,
     pub confidence_bps: u16,
     pub updated_at: u64,
+    pub publish_time: u64,
     pub bump: u8,
     pub reserved: [u8; 64],
 }
 
 impl CollateralOracle {
-    pub const LEN: usize = 32 + 32 + 16 + 2 + 8 + 1 + 64;
+    pub const LEN: usize = 32 + 32 + 1 + 32 + 16 + 2 + 8 + 8 + 1 + 64;
+}
+
+#[account]
+pub struct BuybackCampaign {
+    pub campaign_id: u64,
+    pub status: BuybackCampaignStatus,
+    pub total_usdc: u64,
+    pub remaining_usdc: u64,
+    pub spent_usdc: u64,
+    pub min_total_agc_out: u64,
+    pub agc_burned: u64,
+    pub max_slice_usdc: u64,
+    pub slice_interval_seconds: u64,
+    pub started_at: u64,
+    pub expires_at: u64,
+    pub last_slice_at: u64,
+    pub slice_count: u64,
+    pub adapter_usdc_account: Pubkey,
+    pub usdc_escrow: Pubkey,
+    pub agc_vault: Pubkey,
+    pub bump: u8,
+    pub authority_bump: u8,
+    pub usdc_escrow_bump: u8,
+    pub agc_vault_bump: u8,
+    pub reserved: [u8; 128],
+}
+
+impl BuybackCampaign {
+    pub const LEN: usize = 8 + 1 + (8 * 11) + (32 * 3) + 4 + 128;
 }
 
 #[account]
@@ -2521,6 +2984,22 @@ pub enum CreditLineStatus {
     Defaulted,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum OracleSource {
+    #[default]
+    Manual,
+    Pyth,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BuybackCampaignStatus {
+    #[default]
+    Uninitialized,
+    Active,
+    Completed,
+    Cancelled,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct CollateralOraclePriceInput {
     pub price_quote_x18: u128,
@@ -2549,7 +3028,9 @@ pub struct OpenCreditLineArgs {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct CollateralAssetConfig {
+    pub oracle_source: OracleSource,
     pub oracle_feed: Pubkey,
+    pub pyth_price_feed_id: [u8; 32],
     pub reserve_token_account: Pubkey,
     pub asset_class: AssetClass,
     pub reserve_weight_bps: u16,
@@ -2559,6 +3040,59 @@ pub struct CollateralAssetConfig {
     pub max_oracle_staleness_seconds: u64,
     pub max_oracle_confidence_bps: u16,
     pub enabled: bool,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct BuybackCampaignConfig {
+    pub total_usdc: u64,
+    pub min_total_agc_out: u64,
+    pub max_slice_usdc: u64,
+    pub slice_interval_seconds: u64,
+    pub start_after: u64,
+    pub expires_at: u64,
+    pub adapter_usdc_account: Pubkey,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct BuybackSliceArgs {
+    pub usdc_amount: u64,
+    pub agc_amount_to_burn: u64,
+    pub min_agc_out: u64,
+    pub deadline: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+enum PythVerificationLevel {
+    Partial { num_signatures: u8 },
+    Full,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct PythPriceFeedMessage {
+    feed_id: [u8; 32],
+    price: i64,
+    conf: u64,
+    exponent: i32,
+    publish_time: i64,
+    prev_publish_time: i64,
+    ema_price: i64,
+    ema_conf: u64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct PythPriceUpdateV2AccountData {
+    write_authority: Pubkey,
+    verification_level: PythVerificationLevel,
+    price_message: PythPriceFeedMessage,
+    posted_slot: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PythPrice {
+    price: i64,
+    conf: u64,
+    exponent: i32,
+    publish_time: i64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
@@ -2793,6 +3327,11 @@ pub struct MarketAdapterAuthorityUpdated {
 }
 
 #[event]
+pub struct PythReceiverProgramUpdated {
+    pub receiver_program: Pubkey,
+}
+
+#[event]
 pub struct BuybackUsdcEscrowUpdated {
     pub escrow: Pubkey,
 }
@@ -2996,6 +3535,31 @@ pub struct TreasuryBuybackUsdcReserved {
 }
 
 #[event]
+pub struct BuybackCampaignStarted {
+    pub campaign: Pubkey,
+    pub campaign_id: u64,
+    pub total_usdc: u64,
+    pub min_total_agc_out: u64,
+    pub adapter_usdc_account: Pubkey,
+}
+
+#[event]
+pub struct BuybackTwapSliceExecuted {
+    pub campaign: Pubkey,
+    pub campaign_id: u64,
+    pub usdc_amount: u64,
+    pub agc_burned: u64,
+    pub remaining_usdc: u64,
+    pub total_agc_burned: u64,
+}
+
+#[event]
+pub struct BuybackCampaignCancelled {
+    pub campaign: Pubkey,
+    pub campaign_id: u64,
+}
+
+#[event]
 pub struct TreasuryAgcBurned {
     pub amount: u64,
 }
@@ -3044,6 +3608,8 @@ pub enum AgcError {
     InvalidGovernanceAuthority,
     #[msg("The collateral asset configuration is invalid.")]
     InvalidCollateralAssetConfig,
+    #[msg("The collateral oracle source is invalid for this instruction.")]
+    InvalidOracleSource,
     #[msg("The cached oracle price is invalid or stale.")]
     InvalidOraclePrice,
     #[msg("The collateral asset is disabled.")]
@@ -3072,6 +3638,20 @@ pub enum AgcError {
     CreditLineHealthy,
     #[msg("The credit line is not defaulted.")]
     CreditLineNotDefaulted,
+    #[msg("The legacy buyback transfer path is disabled; use buyback campaigns.")]
+    DeprecatedBuybackPath,
+    #[msg("The buyback campaign configuration is invalid.")]
+    InvalidBuybackCampaignConfig,
+    #[msg("The buyback campaign is not active.")]
+    BuybackCampaignInactive,
+    #[msg("The buyback campaign or slice is not ready.")]
+    BuybackCampaignNotReady,
+    #[msg("The buyback slice exceeds campaign limits.")]
+    BuybackSliceTooLarge,
+    #[msg("The buyback slice deadline has expired.")]
+    BuybackDeadlineExpired,
+    #[msg("The buyback slice did not deliver enough AGC to burn.")]
+    InsufficientBuybackOutput,
     #[msg("Arithmetic overflow or underflow.")]
     MathOverflow,
     #[msg("A u128 policy amount does not fit into a u64 SPL token amount.")]
@@ -3118,7 +3698,10 @@ fn validate_governance_authorities(authorities: GovernanceAuthorities) -> Result
     Ok(())
 }
 
-fn validate_collateral_asset_config(config: CollateralAssetConfig) -> Result<()> {
+fn validate_collateral_asset_config(
+    config: CollateralAssetConfig,
+    pyth_receiver_program: Pubkey,
+) -> Result<()> {
     require!(
         config.reserve_weight_bps <= BPS as u16,
         AgcError::InvalidCollateralAssetConfig
@@ -3144,16 +3727,202 @@ fn validate_collateral_asset_config(config: CollateralAssetConfig) -> Result<()>
         AgcError::InvalidCollateralAssetConfig
     );
     if config.enabled {
-        require!(
-            config.oracle_feed != Pubkey::default(),
-            AgcError::InvalidCollateralAssetConfig
-        );
+        match config.oracle_source {
+            OracleSource::Manual => {
+                require!(
+                    config.oracle_feed != Pubkey::default(),
+                    AgcError::InvalidCollateralAssetConfig
+                );
+                require!(
+                    config.pyth_price_feed_id == [0; 32],
+                    AgcError::InvalidCollateralAssetConfig
+                );
+            }
+            OracleSource::Pyth => {
+                require!(
+                    pyth_receiver_program != Pubkey::default(),
+                    AgcError::InvalidCollateralAssetConfig
+                );
+                require!(
+                    config.pyth_price_feed_id != [0; 32],
+                    AgcError::InvalidCollateralAssetConfig
+                );
+            }
+        }
         require!(
             config.reserve_token_account != Pubkey::default(),
             AgcError::InvalidCollateralAssetConfig
         );
     }
     Ok(())
+}
+
+fn validate_buyback_campaign_config(
+    config: BuybackCampaignConfig,
+    pending_treasury_buyback_usdc: u64,
+    now: u64,
+) -> Result<()> {
+    require!(
+        config.total_usdc > 0 && config.total_usdc <= pending_treasury_buyback_usdc,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    require!(
+        config.min_total_agc_out > 0,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    require!(
+        config.adapter_usdc_account != Pubkey::default(),
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    require!(
+        config.max_slice_usdc > 0 && config.max_slice_usdc <= config.total_usdc,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    require!(
+        config.slice_interval_seconds > 0,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    let started_at = if config.start_after == 0 {
+        now
+    } else {
+        config.start_after
+    };
+    require!(
+        config.expires_at > started_at,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    require!(
+        config.expires_at > now,
+        AgcError::InvalidBuybackCampaignConfig
+    );
+    Ok(())
+}
+
+fn validate_buyback_slice(
+    campaign: &BuybackCampaign,
+    args: BuybackSliceArgs,
+    now: u64,
+) -> Result<()> {
+    require!(
+        campaign.status == BuybackCampaignStatus::Active,
+        AgcError::BuybackCampaignInactive
+    );
+    require!(
+        now >= campaign.started_at && now <= campaign.expires_at,
+        AgcError::BuybackCampaignNotReady
+    );
+    require!(args.deadline >= now, AgcError::BuybackDeadlineExpired);
+    require!(
+        args.usdc_amount > 0 && args.agc_amount_to_burn > 0 && args.min_agc_out > 0,
+        AgcError::ZeroAmount
+    );
+    require!(
+        args.usdc_amount <= campaign.max_slice_usdc && args.usdc_amount <= campaign.remaining_usdc,
+        AgcError::BuybackSliceTooLarge
+    );
+    require!(
+        args.agc_amount_to_burn >= args.min_agc_out,
+        AgcError::InsufficientBuybackOutput
+    );
+    if campaign.slice_count > 0 {
+        let next_slice_at = campaign
+            .last_slice_at
+            .checked_add(campaign.slice_interval_seconds)
+            .ok_or(AgcError::MathOverflow)?;
+        require!(now >= next_slice_at, AgcError::BuybackCampaignNotReady);
+    }
+    Ok(())
+}
+
+fn read_verified_pyth_price(
+    price_update: AccountInfo,
+    expected_receiver_program: Pubkey,
+    expected_feed_id: [u8; 32],
+    maximum_age: u64,
+    now: u64,
+) -> Result<PythPrice> {
+    require!(
+        expected_receiver_program != Pubkey::default(),
+        AgcError::InvalidOraclePrice
+    );
+    require_keys_eq!(
+        *price_update.owner,
+        expected_receiver_program,
+        AgcError::InvalidOraclePrice
+    );
+
+    let data = price_update.try_borrow_data()?;
+    let update = decode_pyth_price_update(&data)?;
+    require!(
+        update.verification_level == PythVerificationLevel::Full,
+        AgcError::InvalidOraclePrice
+    );
+    require!(
+        update.price_message.feed_id == expected_feed_id,
+        AgcError::InvalidOraclePrice
+    );
+    require!(update.price_message.price > 0, AgcError::InvalidPrice);
+    require!(
+        update.price_message.publish_time >= 0,
+        AgcError::InvalidOraclePrice
+    );
+    let publish_time = update.price_message.publish_time as u64;
+    require!(publish_time <= now, AgcError::InvalidOraclePrice);
+    require!(
+        now.saturating_sub(publish_time) <= maximum_age,
+        AgcError::InvalidOraclePrice
+    );
+
+    Ok(PythPrice {
+        price: update.price_message.price,
+        conf: update.price_message.conf,
+        exponent: update.price_message.exponent,
+        publish_time: update.price_message.publish_time,
+    })
+}
+
+fn decode_pyth_price_update(data: &[u8]) -> Result<PythPriceUpdateV2AccountData> {
+    require!(data.len() >= 8, AgcError::InvalidOraclePrice);
+    let expected_discriminator = pyth_price_update_v2_discriminator();
+    require!(
+        data[..8] == expected_discriminator[..],
+        AgcError::InvalidOraclePrice
+    );
+    PythPriceUpdateV2AccountData::deserialize(&mut &data[8..])
+        .map_err(|_| error!(AgcError::InvalidOraclePrice))
+}
+
+fn pyth_price_update_v2_discriminator() -> [u8; 8] {
+    PYTH_PRICE_UPDATE_V2_DISCRIMINATOR
+}
+
+fn pyth_price_to_quote_x18(price: i64, exponent: i32) -> Result<u128> {
+    require!(price > 0, AgcError::InvalidPrice);
+    let price = price as u128;
+    let x18_exponent = exponent.checked_add(18).ok_or(AgcError::MathOverflow)?;
+    let scaled = if x18_exponent >= 0 {
+        let multiplier =
+            pow10_u128(u8::try_from(x18_exponent).map_err(|_| error!(AgcError::MathOverflow))?)?;
+        checked_mul_u128(price, multiplier)?
+    } else {
+        let divisor =
+            pow10_u128(u8::try_from(-x18_exponent).map_err(|_| error!(AgcError::MathOverflow))?)?;
+        checked_div_u128(price, divisor)?
+    };
+    require!(scaled > 0, AgcError::InvalidPrice);
+    Ok(scaled)
+}
+
+fn pyth_confidence_bps(price: i64, conf: u64) -> Result<u16> {
+    require!(price > 0, AgcError::InvalidPrice);
+    let price = price as u128;
+    let scaled_conf = checked_mul_u128(conf as u128, BPS)?;
+    let confidence_bps = checked_div_u128(
+        checked_add_u128(scaled_conf, price.saturating_sub(1), AgcError::MathOverflow)?,
+        price,
+    )?;
+    require!(confidence_bps <= BPS, AgcError::InvalidOraclePrice);
+    u16::try_from(confidence_bps).map_err(|_| error!(AgcError::AmountTooLarge))
 }
 
 fn validate_credit_facility_config(
@@ -3269,6 +4038,16 @@ fn validate_oracle_fresh(
         collateral_asset.oracle_feed,
         AgcError::InvalidOraclePrice
     );
+    require!(
+        collateral_oracle.oracle_source == collateral_asset.oracle_source,
+        AgcError::InvalidOraclePrice
+    );
+    if collateral_asset.oracle_source == OracleSource::Pyth {
+        require!(
+            collateral_oracle.pyth_price_feed_id == collateral_asset.pyth_price_feed_id,
+            AgcError::InvalidOraclePrice
+        );
+    }
     require!(
         collateral_oracle.price_quote_x18 > 0,
         AgcError::InvalidOraclePrice
@@ -4733,6 +5512,68 @@ fn transfer_from_treasury<'info>(
     )
 }
 
+fn transfer_from_buyback_campaign_vault<'info>(
+    campaign_id: u64,
+    authority_bump: u8,
+    source: &Account<'info, TokenAccount>,
+    destination: &Account<'info, TokenAccount>,
+    authority: &UncheckedAccount<'info>,
+    token_program: &Program<'info, Token>,
+    amount: u64,
+) -> Result<()> {
+    let campaign_id_bytes = campaign_id.to_le_bytes();
+    let bump = [authority_bump];
+    let signer_seeds: &[&[u8]] = &[
+        BUYBACK_CAMPAIGN_AUTHORITY_SEED,
+        campaign_id_bytes.as_ref(),
+        bump.as_ref(),
+    ];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            Transfer {
+                from: source.to_account_info(),
+                to: destination.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )
+}
+
+fn burn_from_buyback_campaign_vault<'info>(
+    campaign_id: u64,
+    authority_bump: u8,
+    mint: &Account<'info, Mint>,
+    source: &Account<'info, TokenAccount>,
+    authority: &UncheckedAccount<'info>,
+    token_program: &Program<'info, Token>,
+    amount: u64,
+) -> Result<()> {
+    let campaign_id_bytes = campaign_id.to_le_bytes();
+    let bump = [authority_bump];
+    let signer_seeds: &[&[u8]] = &[
+        BUYBACK_CAMPAIGN_AUTHORITY_SEED,
+        campaign_id_bytes.as_ref(),
+        bump.as_ref(),
+    ];
+    let signer: &[&[&[u8]]] = &[signer_seeds];
+    token::burn(
+        CpiContext::new_with_signer(
+            token_program.key(),
+            Burn {
+                mint: mint.to_account_info(),
+                from: source.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )
+}
+
 fn transfer_from_credit_facility_vault<'info>(
     facility: &Account<'info, CreditFacility>,
     source: &Account<'info, TokenAccount>,
@@ -4886,6 +5727,7 @@ mod tests {
             integrators_agc: Pubkey::default(),
             buyback_usdc_escrow: Pubkey::default(),
             market_adapter_authority: Pubkey::default(),
+            pyth_receiver_program: Pubkey::default(),
             state_bump: 0,
             mint_authority_bump: 0,
             treasury_authority_bump: 0,
@@ -4975,7 +5817,9 @@ mod tests {
         CollateralAsset {
             mint: Pubkey::new_unique(),
             mint_decimals: 9,
+            oracle_source: OracleSource::Manual,
             oracle_feed: Pubkey::new_unique(),
+            pyth_price_feed_id: [0; 32],
             reserve_token_account: Pubkey::new_unique(),
             asset_class: AssetClass::Btc,
             reserve_weight_bps: 6_000,
@@ -4993,9 +5837,12 @@ mod tests {
         CollateralOracle {
             mint: asset.mint,
             oracle_feed: asset.oracle_feed,
+            oracle_source: asset.oracle_source,
+            pyth_price_feed_id: asset.pyth_price_feed_id,
             price_quote_x18: PRICE_SCALE,
             confidence_bps: 25,
             updated_at,
+            publish_time: updated_at,
             bump: 0,
             reserved: [0; 64],
         }
@@ -5054,6 +5901,65 @@ mod tests {
             bump: 0,
             reserved: [0; 128],
         }
+    }
+
+    fn buyback_config() -> BuybackCampaignConfig {
+        BuybackCampaignConfig {
+            total_usdc: 1_000_000,
+            min_total_agc_out: 1_900_000_000,
+            max_slice_usdc: 100_000,
+            slice_interval_seconds: 300,
+            start_after: 1_000,
+            expires_at: 10_000,
+            adapter_usdc_account: Pubkey::new_unique(),
+        }
+    }
+
+    fn buyback_campaign() -> BuybackCampaign {
+        BuybackCampaign {
+            campaign_id: 7,
+            status: BuybackCampaignStatus::Active,
+            total_usdc: 1_000_000,
+            remaining_usdc: 1_000_000,
+            spent_usdc: 0,
+            min_total_agc_out: 1_900_000_000,
+            agc_burned: 0,
+            max_slice_usdc: 100_000,
+            slice_interval_seconds: 300,
+            started_at: 1_000,
+            expires_at: 10_000,
+            last_slice_at: 0,
+            slice_count: 0,
+            adapter_usdc_account: Pubkey::new_unique(),
+            usdc_escrow: Pubkey::new_unique(),
+            agc_vault: Pubkey::new_unique(),
+            bump: 0,
+            authority_bump: 0,
+            usdc_escrow_bump: 0,
+            agc_vault_bump: 0,
+            reserved: [0; 128],
+        }
+    }
+
+    fn pyth_update_bytes(feed_id: [u8; 32], price: i64, conf: u64, publish_time: i64) -> Vec<u8> {
+        let mut data = pyth_price_update_v2_discriminator().to_vec();
+        let update = PythPriceUpdateV2AccountData {
+            write_authority: Pubkey::new_unique(),
+            verification_level: PythVerificationLevel::Full,
+            price_message: PythPriceFeedMessage {
+                feed_id,
+                price,
+                conf,
+                exponent: -8,
+                publish_time,
+                prev_publish_time: publish_time - 1,
+                ema_price: price,
+                ema_conf: conf,
+            },
+            posted_slot: 10,
+        };
+        update.serialize(&mut data).unwrap();
+        data
     }
 
     #[test]
@@ -5211,7 +6117,9 @@ mod tests {
     #[test]
     fn collateral_asset_configs_are_guarded() {
         let mut config = CollateralAssetConfig {
+            oracle_source: OracleSource::Manual,
             oracle_feed: Pubkey::new_unique(),
+            pyth_price_feed_id: [0; 32],
             reserve_token_account: Pubkey::new_unique(),
             asset_class: AssetClass::Btc,
             reserve_weight_bps: 6_000,
@@ -5222,18 +6130,130 @@ mod tests {
             max_oracle_confidence_bps: 100,
             enabled: true,
         };
-        assert!(validate_collateral_asset_config(config).is_ok());
+        assert!(validate_collateral_asset_config(config, Pubkey::default()).is_ok());
 
         config.reserve_weight_bps = 10_001;
-        assert!(validate_collateral_asset_config(config).is_err());
+        assert!(validate_collateral_asset_config(config, Pubkey::default()).is_err());
 
         config.reserve_weight_bps = 6_000;
         config.collateral_factor_bps = 7_000;
-        assert!(validate_collateral_asset_config(config).is_err());
+        assert!(validate_collateral_asset_config(config, Pubkey::default()).is_err());
 
         config.collateral_factor_bps = 5_000;
         config.oracle_feed = Pubkey::default();
-        assert!(validate_collateral_asset_config(config).is_err());
+        assert!(validate_collateral_asset_config(config, Pubkey::default()).is_err());
+    }
+
+    #[test]
+    fn pyth_collateral_config_requires_receiver_and_feed_id() {
+        let mut feed_id = [0_u8; 32];
+        feed_id[31] = 1;
+        let receiver = Pubkey::new_unique();
+        let mut config = CollateralAssetConfig {
+            oracle_source: OracleSource::Pyth,
+            oracle_feed: Pubkey::default(),
+            pyth_price_feed_id: feed_id,
+            reserve_token_account: Pubkey::new_unique(),
+            asset_class: AssetClass::Btc,
+            reserve_weight_bps: 6_000,
+            collateral_factor_bps: 5_000,
+            liquidation_threshold_bps: 6_500,
+            max_concentration_bps: 4_000,
+            max_oracle_staleness_seconds: 60,
+            max_oracle_confidence_bps: 100,
+            enabled: true,
+        };
+
+        assert!(validate_collateral_asset_config(config, receiver).is_ok());
+        assert!(validate_collateral_asset_config(config, Pubkey::default()).is_err());
+
+        config.pyth_price_feed_id = [0; 32];
+        assert!(validate_collateral_asset_config(config, receiver).is_err());
+    }
+
+    #[test]
+    fn pyth_price_conversion_and_confidence_are_bounded() {
+        let btc_price = pyth_price_to_quote_x18(6_500_000_000_000, -8).unwrap();
+        assert_eq!(btc_price, 65_000 * PRICE_SCALE);
+        assert_eq!(
+            pyth_confidence_bps(6_500_000_000_000, 6_500_000_000).unwrap(),
+            10
+        );
+
+        assert!(pyth_price_to_quote_x18(0, -8).is_err());
+        assert!(pyth_price_to_quote_x18(1, -19).is_err());
+        assert!(pyth_confidence_bps(100, 101).is_err());
+    }
+
+    #[test]
+    fn pyth_price_update_decoder_checks_discriminator_and_feed() {
+        let mut feed_id = [0_u8; 32];
+        feed_id[0] = 9;
+        let data = pyth_update_bytes(feed_id, 6_500_000_000_000, 10_000_000, 2_000);
+        let update = decode_pyth_price_update(&data).unwrap();
+        assert_eq!(update.verification_level, PythVerificationLevel::Full);
+        assert_eq!(update.price_message.feed_id, feed_id);
+
+        let mut bad_data = data;
+        bad_data[0] ^= 1;
+        assert!(decode_pyth_price_update(&bad_data).is_err());
+    }
+
+    #[test]
+    fn buyback_campaign_configs_are_guarded() {
+        let mut config = buyback_config();
+        assert!(validate_buyback_campaign_config(config, 2_000_000, 500).is_ok());
+
+        config.total_usdc = 0;
+        assert!(validate_buyback_campaign_config(config, 2_000_000, 500).is_err());
+
+        config = buyback_config();
+        config.total_usdc = 3_000_000;
+        assert!(validate_buyback_campaign_config(config, 2_000_000, 500).is_err());
+
+        config = buyback_config();
+        config.max_slice_usdc = config.total_usdc + 1;
+        assert!(validate_buyback_campaign_config(config, 2_000_000, 500).is_err());
+
+        config = buyback_config();
+        config.expires_at = config.start_after;
+        assert!(validate_buyback_campaign_config(config, 2_000_000, 500).is_err());
+    }
+
+    #[test]
+    fn buyback_slices_enforce_twap_cadence_and_burn_output() {
+        let mut campaign = buyback_campaign();
+        let first_slice = BuybackSliceArgs {
+            usdc_amount: 100_000,
+            agc_amount_to_burn: 200_000_000,
+            min_agc_out: 190_000_000,
+            deadline: 1_500,
+        };
+        assert!(validate_buyback_slice(&campaign, first_slice, 1_200).is_ok());
+
+        let too_large = BuybackSliceArgs {
+            usdc_amount: 100_001,
+            ..first_slice
+        };
+        assert!(validate_buyback_slice(&campaign, too_large, 1_200).is_err());
+
+        let weak_output = BuybackSliceArgs {
+            agc_amount_to_burn: 100_000_000,
+            min_agc_out: 190_000_000,
+            ..first_slice
+        };
+        assert!(validate_buyback_slice(&campaign, weak_output, 1_200).is_err());
+
+        campaign.slice_count = 1;
+        campaign.last_slice_at = 1_200;
+        assert!(validate_buyback_slice(&campaign, first_slice, 1_400).is_err());
+        assert!(validate_buyback_slice(&campaign, first_slice, 1_500).is_ok());
+
+        let expired = BuybackSliceArgs {
+            deadline: 1_499,
+            ..first_slice
+        };
+        assert!(validate_buyback_slice(&campaign, expired, 1_500).is_err());
     }
 
     #[test]
@@ -5254,6 +6274,44 @@ mod tests {
 
         config.isolated = true;
         assert!(validate_credit_facility_config(config, AssetClass::Rwa).is_ok());
+    }
+
+    #[test]
+    fn admin_accept_migrates_roles_still_held_by_previous_admin() {
+        let previous_admin = Pubkey::new_unique();
+        let new_admin = Pubkey::new_unique();
+        let mut state = test_state();
+        state.admin = previous_admin;
+        state.pending_admin = new_admin;
+        state.risk_admin = previous_admin;
+        state.emergency_admin = previous_admin;
+
+        let returned_previous = accept_admin_inner(&mut state, new_admin).unwrap();
+
+        assert_eq!(returned_previous, previous_admin);
+        assert_eq!(state.admin, new_admin);
+        assert_eq!(state.pending_admin, Pubkey::default());
+        assert_eq!(state.risk_admin, new_admin);
+        assert_eq!(state.emergency_admin, new_admin);
+    }
+
+    #[test]
+    fn admin_accept_preserves_explicit_separate_roles() {
+        let previous_admin = Pubkey::new_unique();
+        let new_admin = Pubkey::new_unique();
+        let risk_admin = Pubkey::new_unique();
+        let emergency_admin = Pubkey::new_unique();
+        let mut state = test_state();
+        state.admin = previous_admin;
+        state.pending_admin = new_admin;
+        state.risk_admin = risk_admin;
+        state.emergency_admin = emergency_admin;
+
+        accept_admin_inner(&mut state, new_admin).unwrap();
+
+        assert_eq!(state.admin, new_admin);
+        assert_eq!(state.risk_admin, risk_admin);
+        assert_eq!(state.emergency_admin, emergency_admin);
     }
 
     #[test]

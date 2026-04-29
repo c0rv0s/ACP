@@ -15,5 +15,8 @@ url = "https://api.apr.dev"
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
+[test]
+startup_wait = 10000
+
 [scripts]
-test = "cargo test --manifest-path programs/agc_solana/Cargo.toml --lib"
+test = "ts-mocha -p tsconfig.json -t 1000000 tests/**/*.ts"

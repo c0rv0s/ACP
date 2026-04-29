@@ -9,13 +9,21 @@ Important notes:
 - USDC and USDT are defensive cash reserves.
 - BTC wrappers are strategic reserve collateral with haircuts.
 - Tokenized stocks and RWAs start isolated before they count in global reserve coverage.
-- Credit facilities mint AGC against approved collateral, underwriter reserve, debt caps, and oracle health.
+- Credit facilities mint AGC against approved collateral, underwriter reserve, debt caps, and Pyth-backed oracle health.
+- Buyback defense uses campaign escrows that release USDC only after AGC is delivered and burned.
+- Launch collateral presets cover USDC, USDT, one liquid BTC wrapper, and isolated RWAs.
+- The Raydium-first buyback adapter is an execution client around the onchain campaign invariant.
+- Local-validator integration tests cover SPL mint/vault initialization and freeze-authority rejection.
 - Optional Solana swap adapters are telemetry, not complete global demand, because users can trade public pools through wallets and aggregators.
 
 ## Human Docs
 
 - [Protocol docs](/docs): Human-readable docs page hosted in the frontend.
 - [Solana credit machine](/docs/solana-credit-machine.md): Markdown source for the updated AGC Solana design.
+- [Risk presets](/docs/risk-parameter-presets.md): Launch collateral and policy presets.
+- [User examples](/docs/user-examples.md): Holder, underwriter, borrower, defense, and liquidation examples.
+- [Upgrade runbook](/docs/upgrade-migration-runbook.md): Upgrade and migration operating process.
+- [Raydium adapter](/docs/raydium-buyback-adapter.md): Buyback campaign execution adapter model.
 
 ## AI Docs
 

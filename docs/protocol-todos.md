@@ -4,13 +4,15 @@ This file tracks the remaining work to move the Solana protocol from current imp
 
 ## Solana Program
 
-- [ ] Add direct Pyth or Switchboard adapter validation for collateral oracle cache updates.
+- [x] Add direct Pyth validation for collateral oracle cache updates.
 - [ ] Aggregate reserve value from actual configured reserve token accounts instead of passing reserve metrics manually into settlement.
-- [ ] Add a venue-specific atomic buyback executor that swaps reserved USDC and burns AGC in one controlled flow.
-- [ ] Add integration tests for credit draw, repayment, default, underwriter loss, and collateral seizure across real SPL token accounts.
+- [x] Add a constrained buyback campaign executor that releases USDC slices only after AGC is delivered and burned.
+- [x] Document the Raydium-first buyback adapter MVP around the constrained campaign primitive.
+- [x] Add local-validator Anchor tests for initialization and freeze-authority rejection across real SPL mint/token accounts.
+- [ ] Add deeper local-validator tests for credit draw, repayment, default, underwriter loss, and collateral seizure across real SPL token accounts.
 - [ ] Add migration playbooks for future account-version upgrades.
 - [ ] Decide final launch multisig structure for admin, risk, emergency, and upgrade authorities.
-- [ ] Define production parameter presets for USDC, USDT, the first BTC wrapper, and disabled RWA assets.
+- [x] Define launch parameter presets for USDC, USDT, the first BTC wrapper, and disabled RWA assets.
 
 ## Frontend
 
@@ -24,9 +26,9 @@ This file tracks the remaining work to move the Solana protocol from current imp
 ## Docs
 
 - [ ] Add a deployment guide with exact Solana accounts, PDA seeds, authority setup, and environment variables.
-- [ ] Add a risk-parameter reference for stablecoins, BTC wrappers, and isolated RWAs.
-- [ ] Add user-facing examples for xAGC, credit borrowers, underwriters, and liquidations.
-- [ ] Add an upgrade/governance transparency page explaining who controls each authority and what each authority can do.
+- [x] Add a risk-parameter reference for stablecoins, BTC wrappers, and isolated RWAs.
+- [x] Add user-facing examples for xAGC, credit borrowers, underwriters, and liquidations.
+- [x] Add an upgrade/migration runbook explaining production upgrade controls.
 - [ ] Keep `/llms.txt` and `/llms-full.txt` in sync with product docs after every protocol change.
 
 ## Launch Readiness

@@ -22,7 +22,7 @@ Expansion never comes from:
 - raw hype volume by itself
 - keeper-reported buy pressure as the only trigger
 - unbounded inflation
-- non-atomic buybacks
+- fake or discretionary buybacks
 - admin discretion outside hard-coded parameter bounds
 
 Short form:
@@ -146,7 +146,7 @@ Expansion requires:
 - stable cash coverage above the stable-cash threshold
 - sufficient AGC/USDC liquidity depth
 - collateral concentration below cap
-- fresh oracle data with acceptable confidence
+- fresh Pyth oracle data with acceptable confidence for Pyth-backed collateral
 - low volatility
 - low exit pressure
 - positive xAGC lock flow
@@ -160,6 +160,8 @@ Defense triggers:
 - stale or low-confidence oracle data
 - volatility above defense threshold
 - exit pressure above defense threshold
+
+When defense budgets are queued, they enter a buyback campaign instead of a free-form treasury transfer. The campaign owns a USDC escrow and an AGC burn vault. An executor can source AGC through the best available route, but the program only releases a USDC slice after the matching AGC is already in the campaign vault and burned in the same instruction. This gives operators routing discretion without letting buyback funds become discretionary withdrawals.
 
 ## 5. Credit Facilities
 
@@ -185,7 +187,7 @@ Important mechanics:
 - Principal repayment burns AGC, reducing outstanding credit.
 - Interest repayment flows into the underwriter reserve.
 - Underwriters are first-loss capital. Default burns available underwriter AGC before collateral recovery.
-- Borrower collateral is valued through the configured collateral oracle cache.
+- Borrower collateral is valued through the configured collateral oracle cache. Pyth-backed collateral refreshes through verified Pyth receiver price-update accounts, not keeper-reported numbers.
 - Draws fail if the line exceeds its credit limit, the facility exceeds total debt caps, health falls below the minimum, or underwriter reserve falls below the required percentage.
 - Matured or unhealthy lines can be marked defaulted by credit authority or governance, and seized collateral routes to the configured reserve account for that collateral mint.
 
@@ -281,6 +283,7 @@ Therefore:
 - Policy does not require every swap to pass through AGC.
 - Adapter-reported swap flow is official-venue telemetry, not global demand.
 - Critical expansion math uses reserves, collateral, oracles, liquidity depth, and credit quality.
+- Defense buybacks use campaign escrows: USDC is released slice by slice only after AGC is delivered and burned.
 
 ## 10. Current Implementation
 
@@ -294,16 +297,15 @@ The Anchor program now contains the core Solana protocol surfaces:
 - Two-step admin transfer.
 - Emergency pause flags across market, settlement, vault, collateral, buyback, and credit surfaces.
 - Collateral asset registry with reserve weight, collateral factor, liquidation threshold, concentration cap, oracle staleness, and oracle confidence controls.
-- Collateral oracle cache accounts keyed by collateral mint.
+- Collateral oracle cache accounts keyed by collateral mint, with direct Pyth receiver validation for Pyth-backed assets.
 - Credit facilities with collateral vaults, underwriter AGC vaults, borrower credit-line accounts, draw caps, interest accrual, repayment, default, and collateral seizure.
 - Policy settlement with stable cash coverage, risk-weighted reserve coverage, liquidity depth coverage, oracle confidence, oracle staleness, and concentration inputs.
-- Buyback budget reservation to a configured escrow instead of arbitrary token accounts.
+- Buyback campaign escrows with max slice size, cadence, deadlines, min output, and same-instruction AGC burns before USDC release.
 
 Production integration work still sits on the path to launch:
 
-- Direct Pyth or Switchboard adapter validation for the collateral oracle cache.
 - On-chain reserve aggregation from configured reserve token accounts.
-- A venue-specific atomic buyback executor that swaps escrowed USDC and burns AGC in one controlled flow.
+- Optional venue-specific CPI adapters for Raydium, Orca, or Jupiter-routed execution around the buyback campaign primitive.
 - Frontend IDL/client wiring for live Solana transactions.
 - Isolated RWA onboarding with issuer, legal, oracle, and liquidity constraints.
 
