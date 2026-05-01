@@ -7,6 +7,7 @@ import {
 import { hasSolanaDeployment, solanaAddresses } from "./contracts";
 
 const docsHref = "/docs";
+const xProfileHref = "https://x.com/AgentCreditSOL";
 
 const dashboardNavItems = [
   { label: "Landing", href: "/" },
@@ -14,6 +15,7 @@ const dashboardNavItems = [
   { label: "Use AGC", href: "#market-desk" },
   { label: "Expansion", href: "#policy" },
   { label: "Docs", href: docsHref },
+  { label: "X", href: xProfileHref },
 ] as const;
 
 const landingSections = [
@@ -476,7 +478,7 @@ function LandingPage() {
             <a href="/dashboard">AGC Console</a>
             <a href={`${docsHref}/defense`}>Safety Docs</a>
             <a href={`${docsHref}/governance`}>Governance Docs</a>
-            <a href="https://x.com">X</a>
+            <a href={xProfileHref} target="_blank" rel="noreferrer">X</a>
           </div>
         </div>
       </section>
@@ -634,6 +636,9 @@ function DocsPage() {
         </a>
         <nav className="nav" aria-label="Docs navigation" />
         <div className="wallet">
+          <a className="button button-secondary" href={xProfileHref} target="_blank" rel="noreferrer">
+            X
+          </a>
           <a className="button button-secondary" href="/dashboard">
             AGC Console
           </a>
@@ -948,7 +953,12 @@ function DashboardPage() {
 
         <nav className="nav" aria-label="AGC console navigation">
           {dashboardNavItems.map((item) => (
-            <a key={item.label} href={item.href}>
+            <a
+              key={item.label}
+              href={item.href}
+              target={item.href.startsWith("https://") ? "_blank" : undefined}
+              rel={item.href.startsWith("https://") ? "noreferrer" : undefined}
+            >
               {item.label}
             </a>
           ))}
