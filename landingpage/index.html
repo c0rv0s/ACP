@@ -28,7 +28,7 @@
           </div>
         </div>
         <div class="hero-art" aria-hidden="true">
-          <img src="./assets/hero-sun-paper-cutout.png" alt="" />
+          <img src="./assets/hero-blocks.png" alt="" />
         </div>
       </section>
 
@@ -86,5 +86,57 @@
         </div>
       </section>
     </main>
+    <script>
+      (() => {
+        const card = document.querySelector(".protocol-card");
+        const dots = [
+          { element: document.querySelector(".dot-a"), angle: -42, speed: 58 },
+          { element: document.querySelector(".dot-b"), angle: -76, speed: 82 },
+          { element: document.querySelector(".dot-c"), angle: 45, speed: 46 },
+          { element: document.querySelector(".dot-d"), angle: 152, speed: 37 },
+        ];
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let frame = 0;
+        let lastTime = 0;
+
+        const render = () => {
+          dots.forEach(({ element, angle }) => {
+            element.style.setProperty("--dot-angle", `${angle}deg`);
+          });
+        };
+
+        const tick = (time) => {
+          if (!lastTime) lastTime = time;
+          const delta = Math.min((time - lastTime) / 1000, 0.05);
+          lastTime = time;
+          dots.forEach((dot) => {
+            dot.angle = (dot.angle + dot.speed * delta) % 360;
+          });
+          render();
+          frame = requestAnimationFrame(tick);
+        };
+
+        const start = () => {
+          if (reduceMotion.matches || frame) return;
+          lastTime = 0;
+          frame = requestAnimationFrame(tick);
+        };
+
+        const stop = () => {
+          if (!frame) return;
+          cancelAnimationFrame(frame);
+          frame = 0;
+          lastTime = 0;
+          render();
+        };
+
+        render();
+        card.addEventListener("mouseenter", start);
+        card.addEventListener("mouseleave", stop);
+        card.addEventListener("focusin", start);
+        card.addEventListener("focusout", stop);
+        reduceMotion.addEventListener("change", stop);
+      })();
+    </script>
   </body>
 </html>

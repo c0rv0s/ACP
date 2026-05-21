@@ -92,6 +92,37 @@ a {
   }
 }
 
+@keyframes future-wake {
+  0% {
+    transform: scale(1);
+  }
+
+  38% {
+    transform: scale(1.028);
+  }
+
+  62% {
+    transform: scale(1.014);
+  }
+
+  100% {
+    transform: scale(1.026);
+  }
+}
+
+@keyframes future-plus {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  45% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+}
+
 .page-shell {
   display: flex;
   flex-direction: column;
@@ -487,30 +518,36 @@ h3 {
   width: 9px;
   height: 9px;
   background: #7f9279;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--dot-angle)) translateX(var(--dot-radius));
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .dot-a {
-  top: 29px;
-  right: 35px;
+  --dot-angle: -42deg;
+  --dot-radius: 99px;
 }
 
 .dot-b {
-  top: 22px;
-  right: 94px;
+  --dot-angle: -76deg;
+  --dot-radius: 78px;
   width: 6px !important;
   height: 6px !important;
   opacity: 0.55;
 }
 
 .dot-c {
-  right: 49px;
-  bottom: 22px;
+  --dot-angle: 45deg;
+  --dot-radius: 88px;
 }
 
 .dot-d {
-  bottom: 50px;
-  left: 13px;
+  --dot-angle: 152deg;
+  --dot-radius: 101px;
 }
+
 
 .soon-card {
   background:
@@ -558,7 +595,7 @@ h3 {
 .soon-card:hover .future-orbit {
   border-color: rgba(36, 42, 42, 0.34);
   opacity: 0.9;
-  transform: scale(1.025);
+  animation: future-wake 1.45s cubic-bezier(0.2, 0.72, 0.2, 1) both;
 }
 
 .future-orbit span {
@@ -568,6 +605,7 @@ h3 {
   width: 14px;
   height: 14px;
   transform: translate(-50%, -50%);
+  transition: opacity 260ms ease;
 }
 
 .future-orbit span::before,
@@ -589,6 +627,10 @@ h3 {
   left: 6px;
   width: 1px;
   height: 14px;
+}
+
+.soon-card:hover .future-orbit span {
+  animation: future-plus 1.45s ease-in-out both;
 }
 
 @media (max-width: 1400px) {
