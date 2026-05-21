@@ -1,0 +1,7582 @@
+{
+  "address": "H1n8VTp6pMY5WFfVfi4MNkQ9q5szkMpVWcHQ21JRETXC",
+  "metadata": {
+    "name": "agc_solana",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Solana implementation of Agent Credit Protocol core policy and vault mechanics"
+  },
+  "instructions": [
+    {
+      "name": "accept_admin",
+      "discriminator": [
+        112,
+        42,
+        45,
+        90,
+        116,
+        181,
+        13,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending_admin",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "burn_treasury_agc",
+      "discriminator": [
+        181,
+        74,
+        231,
+        5,
+        46,
+        199,
+        31,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "treasury_agc",
+          "writable": true
+        },
+        {
+          "name": "treasury_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "cancel_buyback_campaign",
+      "discriminator": [
+        40,
+        169,
+        154,
+        102,
+        45,
+        47,
+        38,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaign_id",
+                "account": "BuybackCampaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaign_usdc_escrow",
+          "writable": true
+        },
+        {
+          "name": "campaign_agc_vault",
+          "writable": true
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "campaign_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaign_id",
+                "account": "BuybackCampaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit_credit_collateral",
+      "discriminator": [
+        56,
+        40,
+        41,
+        171,
+        236,
+        222,
+        91,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.borrower",
+                "account": "CreditLine"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.line_id",
+                "account": "CreditLine"
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower",
+          "signer": true
+        },
+        {
+          "name": "borrower_collateral",
+          "writable": true
+        },
+        {
+          "name": "collateral_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "deposit_underwriter_agc",
+      "discriminator": [
+        47,
+        254,
+        189,
+        172,
+        1,
+        29,
+        131,
+        2
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "underwriter",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "underwriter_agc",
+          "writable": true
+        },
+        {
+          "name": "underwriter_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "underwriter_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  110,
+                  100,
+                  101,
+                  114,
+                  119,
+                  114,
+                  105,
+                  116,
+                  101,
+                  114,
+                  45,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "underwriter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "deposit_xagc",
+      "discriminator": [
+        108,
+        201,
+        241,
+        185,
+        120,
+        223,
+        188,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "depositor",
+          "signer": true
+        },
+        {
+          "name": "depositor_agc",
+          "writable": true
+        },
+        {
+          "name": "xagc_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "xagc_mint",
+          "writable": true
+        },
+        {
+          "name": "receiver_xagc",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "assets",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "draw_credit_line",
+      "discriminator": [
+        244,
+        240,
+        156,
+        222,
+        214,
+        114,
+        210,
+        43
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_asset"
+        },
+        {
+          "name": "collateral_oracle",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.collateral_mint",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "credit_line",
+          "writable": true
+        },
+        {
+          "name": "borrower",
+          "signer": true
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "borrower_agc_destination",
+          "writable": true
+        },
+        {
+          "name": "treasury_agc",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "execute_buyback_twap_slice",
+      "discriminator": [
+        33,
+        11,
+        76,
+        140,
+        49,
+        108,
+        21,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaign_id",
+                "account": "BuybackCampaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaign_usdc_escrow",
+          "writable": true
+        },
+        {
+          "name": "campaign_agc_vault",
+          "writable": true
+        },
+        {
+          "name": "adapter_usdc_destination",
+          "writable": true
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "campaign_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaign_id",
+                "account": "BuybackCampaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "BuybackSliceArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_credit_facility",
+      "discriminator": [
+        134,
+        28,
+        164,
+        57,
+        219,
+        112,
+        80,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "collateral_asset",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "facility_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "collateral_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "underwriter_vault_agc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  110,
+                  100,
+                  101,
+                  114,
+                  119,
+                  114,
+                  105,
+                  116,
+                  101,
+                  114,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "facility_id",
+          "type": "u64"
+        },
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "CreditFacilityConfig"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_protocol",
+      "discriminator": [
+        188,
+        233,
+        252,
+        106,
+        134,
+        146,
+        202,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "xagc_mint",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "treasury_agc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  97,
+                  103,
+                  99
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xagc_vault_agc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  120,
+                  97,
+                  103,
+                  99,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  97,
+                  103,
+                  99
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xagc_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  120,
+                  97,
+                  103,
+                  99,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitializeProtocolArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mark_credit_line_default",
+      "discriminator": [
+        217,
+        239,
+        63,
+        153,
+        180,
+        253,
+        177,
+        227
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_asset"
+        },
+        {
+          "name": "collateral_oracle",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.collateral_mint",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.borrower",
+                "account": "CreditLine"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.line_id",
+                "account": "CreditLine"
+              }
+            ]
+          }
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "underwriter_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "facility_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "open_credit_line",
+      "discriminator": [
+        126,
+        111,
+        245,
+        44,
+        233,
+        249,
+        30,
+        238
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower"
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "borrower"
+              },
+              {
+                "kind": "arg",
+                "path": "line_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "line_id",
+          "type": "u64"
+        },
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OpenCreditLineArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "record_market_observation",
+      "discriminator": [
+        27,
+        235,
+        76,
+        215,
+        122,
+        161,
+        52,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        }
+      ],
+      "args": [
+        {
+          "name": "price_x18",
+          "type": "u128"
+        }
+      ]
+    },
+    {
+      "name": "record_swap",
+      "discriminator": [
+        164,
+        158,
+        148,
+        54,
+        167,
+        137,
+        171,
+        59
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "RecordSwapArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeem_xagc",
+      "discriminator": [
+        150,
+        113,
+        149,
+        152,
+        41,
+        99,
+        43,
+        76
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "owner_xagc",
+          "writable": true
+        },
+        {
+          "name": "xagc_mint",
+          "writable": true
+        },
+        {
+          "name": "xagc_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "treasury_agc",
+          "writable": true
+        },
+        {
+          "name": "receiver_agc",
+          "writable": true
+        },
+        {
+          "name": "xagc_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  120,
+                  97,
+                  103,
+                  99,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "refresh_collateral_oracle_from_pyth",
+      "discriminator": [
+        211,
+        32,
+        144,
+        150,
+        173,
+        128,
+        165,
+        45
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "collateral_asset",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_oracle",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "price_update"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "repay_credit_line",
+      "discriminator": [
+        105,
+        166,
+        167,
+        5,
+        56,
+        41,
+        160,
+        171
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.borrower",
+                "account": "CreditLine"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.line_id",
+                "account": "CreditLine"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "payer_agc",
+          "writable": true
+        },
+        {
+          "name": "underwriter_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "reserve_treasury_buyback_usdc",
+      "discriminator": [
+        113,
+        3,
+        255,
+        229,
+        153,
+        91,
+        179,
+        112
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "buyback_usdc_destination",
+          "writable": true
+        },
+        {
+          "name": "treasury_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "seize_defaulted_collateral",
+      "discriminator": [
+        157,
+        136,
+        21,
+        68,
+        118,
+        54,
+        242,
+        19
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_asset"
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.borrower",
+                "account": "CreditLine"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.line_id",
+                "account": "CreditLine"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_vault",
+          "writable": true
+        },
+        {
+          "name": "collateral_destination",
+          "writable": true
+        },
+        {
+          "name": "facility_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_buyback_usdc_escrow",
+      "discriminator": [
+        201,
+        174,
+        186,
+        209,
+        181,
+        176,
+        243,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        },
+        {
+          "name": "buyback_usdc_escrow"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_collateral_asset",
+      "discriminator": [
+        63,
+        82,
+        188,
+        17,
+        222,
+        188,
+        109,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "collateral_asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "CollateralAssetConfig"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_collateral_oracle_price",
+      "discriminator": [
+        32,
+        122,
+        28,
+        139,
+        77,
+        250,
+        140,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "collateral_asset",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_oracle",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "price",
+          "type": {
+            "defined": {
+              "name": "CollateralOraclePriceInput"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_credit_facility_config",
+      "discriminator": [
+        50,
+        131,
+        43,
+        251,
+        24,
+        127,
+        46,
+        79
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_asset"
+        }
+      ],
+      "args": [
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "CreditFacilityConfig"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_exit_fee_bps",
+      "discriminator": [
+        116,
+        221,
+        63,
+        69,
+        230,
+        122,
+        216,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "exit_fee_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_governance_authorities",
+      "discriminator": [
+        176,
+        224,
+        97,
+        63,
+        100,
+        187,
+        20,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "authorities",
+          "type": {
+            "defined": {
+              "name": "GovernanceAuthorities"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_growth_programs_enabled",
+      "discriminator": [
+        163,
+        88,
+        159,
+        16,
+        153,
+        3,
+        50,
+        39
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "enabled",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_keeper",
+      "discriminator": [
+        102,
+        94,
+        23,
+        78,
+        157,
+        222,
+        243,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        },
+        {
+          "name": "keeper_authority"
+        },
+        {
+          "name": "keeper",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  101,
+                  101,
+                  112,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "keeper_authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "allowed",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_keeper_permissions",
+      "discriminator": [
+        49,
+        51,
+        150,
+        111,
+        8,
+        36,
+        14,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        },
+        {
+          "name": "keeper_authority"
+        },
+        {
+          "name": "keeper",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  101,
+                  101,
+                  112,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "keeper_authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "permissions",
+          "type": {
+            "defined": {
+              "name": "KeeperPermissions"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_market_adapter_authority",
+      "discriminator": [
+        241,
+        17,
+        231,
+        137,
+        153,
+        77,
+        153,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_mint_distribution",
+      "discriminator": [
+        185,
+        81,
+        50,
+        132,
+        155,
+        17,
+        185,
+        125
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "distribution",
+          "type": {
+            "defined": {
+              "name": "MintDistribution"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_pause_flags",
+      "discriminator": [
+        205,
+        167,
+        85,
+        237,
+        144,
+        202,
+        248,
+        175
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "pause_flags",
+          "type": {
+            "defined": {
+              "name": "PauseFlags"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_policy_params",
+      "discriminator": [
+        170,
+        27,
+        63,
+        174,
+        155,
+        242,
+        215,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "PolicyParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_pyth_receiver_program",
+      "discriminator": [
+        141,
+        221,
+        223,
+        120,
+        194,
+        152,
+        205,
+        191
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "receiver_program",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_settlement_recipients",
+      "discriminator": [
+        160,
+        89,
+        18,
+        180,
+        138,
+        235,
+        150,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "recipients",
+          "type": {
+            "defined": {
+              "name": "SettlementRecipients"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "settle_epoch",
+      "discriminator": [
+        148,
+        223,
+        178,
+        38,
+        201,
+        158,
+        167,
+        13
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "agc_mint",
+          "writable": true
+        },
+        {
+          "name": "xagc_mint"
+        },
+        {
+          "name": "xagc_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "treasury_agc",
+          "writable": true
+        },
+        {
+          "name": "treasury_usdc"
+        },
+        {
+          "name": "growth_programs_agc",
+          "writable": true
+        },
+        {
+          "name": "lp_agc",
+          "writable": true
+        },
+        {
+          "name": "integrators_agc",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "external_metrics",
+          "type": {
+            "defined": {
+              "name": "ExternalMetrics"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "start_buyback_campaign",
+      "discriminator": [
+        53,
+        145,
+        4,
+        225,
+        250,
+        163,
+        189,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "keeper"
+        },
+        {
+          "name": "treasury_usdc",
+          "writable": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "campaign_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaign_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "campaign_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaign_usdc_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  45,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "campaign_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaign_agc_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107,
+                  45,
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  45,
+                  97,
+                  103,
+                  99
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "campaign_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "agc_mint"
+        },
+        {
+          "name": "treasury_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "campaign_id",
+          "type": "u64"
+        },
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "BuybackCampaignConfig"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "transfer_admin",
+      "discriminator": [
+        42,
+        242,
+        66,
+        106,
+        228,
+        10,
+        111,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "state"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "next_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_credit_collateral",
+      "discriminator": [
+        31,
+        57,
+        83,
+        135,
+        246,
+        178,
+        252,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_asset"
+        },
+        {
+          "name": "collateral_oracle",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.collateral_mint",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "credit_line",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  108,
+                  105,
+                  110,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.borrower",
+                "account": "CreditLine"
+              },
+              {
+                "kind": "account",
+                "path": "credit_line.line_id",
+                "account": "CreditLine"
+              }
+            ]
+          }
+        },
+        {
+          "name": "borrower",
+          "signer": true
+        },
+        {
+          "name": "collateral_vault",
+          "writable": true
+        },
+        {
+          "name": "borrower_collateral_destination",
+          "writable": true
+        },
+        {
+          "name": "facility_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_underwriter_agc",
+      "discriminator": [
+        105,
+        241,
+        235,
+        158,
+        191,
+        165,
+        246,
+        175
+      ],
+      "accounts": [
+        {
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "facility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility.facility_id",
+                "account": "CreditFacility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "underwriter",
+          "signer": true
+        },
+        {
+          "name": "underwriter_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  110,
+                  100,
+                  101,
+                  114,
+                  119,
+                  114,
+                  105,
+                  116,
+                  101,
+                  114,
+                  45,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              },
+              {
+                "kind": "account",
+                "path": "underwriter"
+              }
+            ]
+          }
+        },
+        {
+          "name": "underwriter_vault_agc",
+          "writable": true
+        },
+        {
+          "name": "underwriter_agc_destination",
+          "writable": true
+        },
+        {
+          "name": "facility_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  114,
+                  101,
+                  100,
+                  105,
+                  116,
+                  45,
+                  102,
+                  97,
+                  99,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "facility"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "BuybackCampaign",
+      "discriminator": [
+        73,
+        198,
+        70,
+        190,
+        124,
+        31,
+        13,
+        5
+      ]
+    },
+    {
+      "name": "CollateralAsset",
+      "discriminator": [
+        254,
+        180,
+        112,
+        90,
+        72,
+        6,
+        245,
+        149
+      ]
+    },
+    {
+      "name": "CollateralOracle",
+      "discriminator": [
+        7,
+        36,
+        166,
+        11,
+        132,
+        196,
+        0,
+        245
+      ]
+    },
+    {
+      "name": "CreditFacility",
+      "discriminator": [
+        192,
+        187,
+        81,
+        192,
+        233,
+        124,
+        22,
+        17
+      ]
+    },
+    {
+      "name": "CreditLine",
+      "discriminator": [
+        220,
+        226,
+        205,
+        24,
+        220,
+        151,
+        129,
+        104
+      ]
+    },
+    {
+      "name": "Keeper",
+      "discriminator": [
+        127,
+        221,
+        194,
+        46,
+        120,
+        73,
+        144,
+        77
+      ]
+    },
+    {
+      "name": "ProtocolState",
+      "discriminator": [
+        33,
+        51,
+        173,
+        134,
+        35,
+        140,
+        195,
+        248
+      ]
+    },
+    {
+      "name": "UnderwriterPosition",
+      "discriminator": [
+        33,
+        87,
+        62,
+        126,
+        208,
+        123,
+        202,
+        22
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AdminTransferStarted",
+      "discriminator": [
+        31,
+        82,
+        117,
+        177,
+        147,
+        168,
+        210,
+        177
+      ]
+    },
+    {
+      "name": "AdminTransferred",
+      "discriminator": [
+        255,
+        147,
+        182,
+        5,
+        199,
+        217,
+        38,
+        179
+      ]
+    },
+    {
+      "name": "BuybackCampaignCancelled",
+      "discriminator": [
+        170,
+        143,
+        194,
+        187,
+        47,
+        172,
+        178,
+        36
+      ]
+    },
+    {
+      "name": "BuybackCampaignStarted",
+      "discriminator": [
+        235,
+        255,
+        85,
+        235,
+        228,
+        56,
+        141,
+        241
+      ]
+    },
+    {
+      "name": "BuybackTwapSliceExecuted",
+      "discriminator": [
+        69,
+        251,
+        12,
+        103,
+        219,
+        149,
+        60,
+        185
+      ]
+    },
+    {
+      "name": "BuybackUsdcEscrowUpdated",
+      "discriminator": [
+        189,
+        206,
+        22,
+        81,
+        69,
+        222,
+        126,
+        66
+      ]
+    },
+    {
+      "name": "CollateralAssetUpdated",
+      "discriminator": [
+        109,
+        182,
+        169,
+        21,
+        170,
+        245,
+        253,
+        90
+      ]
+    },
+    {
+      "name": "CollateralOraclePriceUpdated",
+      "discriminator": [
+        39,
+        10,
+        128,
+        204,
+        138,
+        140,
+        44,
+        114
+      ]
+    },
+    {
+      "name": "CreditCollateralDeposited",
+      "discriminator": [
+        12,
+        124,
+        149,
+        176,
+        51,
+        86,
+        90,
+        54
+      ]
+    },
+    {
+      "name": "CreditCollateralWithdrawn",
+      "discriminator": [
+        236,
+        193,
+        138,
+        186,
+        27,
+        68,
+        102,
+        229
+      ]
+    },
+    {
+      "name": "CreditFacilityConfigUpdated",
+      "discriminator": [
+        118,
+        103,
+        65,
+        236,
+        152,
+        172,
+        78,
+        19
+      ]
+    },
+    {
+      "name": "CreditFacilityInitialized",
+      "discriminator": [
+        35,
+        108,
+        129,
+        242,
+        44,
+        159,
+        197,
+        186
+      ]
+    },
+    {
+      "name": "CreditLineDefaulted",
+      "discriminator": [
+        51,
+        30,
+        136,
+        186,
+        118,
+        147,
+        147,
+        196
+      ]
+    },
+    {
+      "name": "CreditLineDrawn",
+      "discriminator": [
+        128,
+        226,
+        93,
+        77,
+        149,
+        53,
+        111,
+        84
+      ]
+    },
+    {
+      "name": "CreditLineOpened",
+      "discriminator": [
+        72,
+        103,
+        68,
+        151,
+        111,
+        168,
+        27,
+        89
+      ]
+    },
+    {
+      "name": "CreditLineRepaid",
+      "discriminator": [
+        201,
+        66,
+        159,
+        5,
+        169,
+        142,
+        192,
+        187
+      ]
+    },
+    {
+      "name": "DefaultedCollateralSeized",
+      "discriminator": [
+        129,
+        115,
+        255,
+        172,
+        208,
+        252,
+        174,
+        8
+      ]
+    },
+    {
+      "name": "EpochSettled",
+      "discriminator": [
+        32,
+        219,
+        45,
+        156,
+        250,
+        115,
+        190,
+        255
+      ]
+    },
+    {
+      "name": "ExitFeeUpdated",
+      "discriminator": [
+        36,
+        119,
+        54,
+        25,
+        253,
+        35,
+        51,
+        232
+      ]
+    },
+    {
+      "name": "GovernanceAuthoritiesUpdated",
+      "discriminator": [
+        149,
+        244,
+        221,
+        178,
+        44,
+        4,
+        8,
+        161
+      ]
+    },
+    {
+      "name": "GrowthProgramsEnabledUpdated",
+      "discriminator": [
+        226,
+        184,
+        5,
+        91,
+        27,
+        107,
+        11,
+        21
+      ]
+    },
+    {
+      "name": "KeeperPermissionsUpdated",
+      "discriminator": [
+        9,
+        237,
+        2,
+        236,
+        132,
+        245,
+        185,
+        128
+      ]
+    },
+    {
+      "name": "MarketAdapterAuthorityUpdated",
+      "discriminator": [
+        59,
+        43,
+        53,
+        103,
+        253,
+        246,
+        79,
+        184
+      ]
+    },
+    {
+      "name": "MintDistributionUpdated",
+      "discriminator": [
+        139,
+        190,
+        207,
+        127,
+        235,
+        68,
+        75,
+        235
+      ]
+    },
+    {
+      "name": "PauseFlagsUpdated",
+      "discriminator": [
+        27,
+        241,
+        6,
+        218,
+        123,
+        5,
+        234,
+        94
+      ]
+    },
+    {
+      "name": "PolicyParametersUpdated",
+      "discriminator": [
+        84,
+        165,
+        179,
+        98,
+        151,
+        206,
+        123,
+        173
+      ]
+    },
+    {
+      "name": "ProtocolInitialized",
+      "discriminator": [
+        173,
+        122,
+        168,
+        254,
+        9,
+        118,
+        76,
+        132
+      ]
+    },
+    {
+      "name": "PythReceiverProgramUpdated",
+      "discriminator": [
+        36,
+        29,
+        95,
+        66,
+        72,
+        65,
+        173,
+        41
+      ]
+    },
+    {
+      "name": "SettlementRecipientsUpdated",
+      "discriminator": [
+        104,
+        77,
+        134,
+        53,
+        173,
+        169,
+        80,
+        109
+      ]
+    },
+    {
+      "name": "SwapRecorded",
+      "discriminator": [
+        59,
+        50,
+        246,
+        150,
+        31,
+        55,
+        2,
+        219
+      ]
+    },
+    {
+      "name": "TreasuryAgcBurned",
+      "discriminator": [
+        73,
+        228,
+        159,
+        107,
+        230,
+        0,
+        250,
+        95
+      ]
+    },
+    {
+      "name": "TreasuryBuybackUsdcReserved",
+      "discriminator": [
+        31,
+        167,
+        185,
+        74,
+        230,
+        157,
+        185,
+        85
+      ]
+    },
+    {
+      "name": "UnderwriterAgcDeposited",
+      "discriminator": [
+        223,
+        119,
+        147,
+        177,
+        82,
+        158,
+        188,
+        166
+      ]
+    },
+    {
+      "name": "UnderwriterAgcWithdrawn",
+      "discriminator": [
+        190,
+        29,
+        127,
+        239,
+        63,
+        148,
+        225,
+        155
+      ]
+    },
+    {
+      "name": "XagcDeposited",
+      "discriminator": [
+        171,
+        70,
+        208,
+        161,
+        37,
+        174,
+        30,
+        184
+      ]
+    },
+    {
+      "name": "XagcRedeemed",
+      "discriminator": [
+        4,
+        164,
+        218,
+        250,
+        23,
+        166,
+        92,
+        124
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "The signer is not authorized for this instruction."
+    },
+    {
+      "code": 6001,
+      "name": "InvalidMintAuthority",
+      "msg": "The configured SPL token mint authority is not the AGC program PDA."
+    },
+    {
+      "code": 6002,
+      "name": "InvalidFreezeAuthority",
+      "msg": "The AGC-controlled mint must not have an external freeze authority."
+    },
+    {
+      "code": 6003,
+      "name": "InvalidTokenAccount",
+      "msg": "The provided token account does not match the protocol configuration."
+    },
+    {
+      "code": 6004,
+      "name": "UnsupportedDecimalConfig",
+      "msg": "The mint decimals are unsupported."
+    },
+    {
+      "code": 6005,
+      "name": "InvalidMintDistribution",
+      "msg": "The mint distribution must total 10_000 bps and include xAGC."
+    },
+    {
+      "code": 6006,
+      "name": "InvalidFee",
+      "msg": "The fee must be below 10_000 bps."
+    },
+    {
+      "code": 6007,
+      "name": "InvalidPolicyParams",
+      "msg": "The policy parameters are internally inconsistent."
+    },
+    {
+      "code": 6008,
+      "name": "ZeroAmount",
+      "msg": "The amount must be non-zero."
+    },
+    {
+      "code": 6009,
+      "name": "InsufficientShares",
+      "msg": "The xAGC token account does not have enough shares."
+    },
+    {
+      "code": 6010,
+      "name": "InvalidPrice",
+      "msg": "The market price must be non-zero."
+    },
+    {
+      "code": 6011,
+      "name": "EpochTooSoon",
+      "msg": "The epoch cannot be settled yet."
+    },
+    {
+      "code": 6012,
+      "name": "InvalidEpoch",
+      "msg": "The epoch id has already been settled."
+    },
+    {
+      "code": 6013,
+      "name": "InvalidSettlementRecipient",
+      "msg": "A settlement recipient account does not match protocol state."
+    },
+    {
+      "code": 6014,
+      "name": "NoPendingTreasuryBuyback",
+      "msg": "There is no queued treasury buyback budget."
+    },
+    {
+      "code": 6015,
+      "name": "BuybackEscrowNotConfigured",
+      "msg": "The protocol buyback escrow has not been configured."
+    },
+    {
+      "code": 6016,
+      "name": "InvalidBuybackEscrow",
+      "msg": "The provided buyback escrow is not the configured escrow."
+    },
+    {
+      "code": 6017,
+      "name": "Paused",
+      "msg": "The protocol is paused for this instruction."
+    },
+    {
+      "code": 6018,
+      "name": "InvalidAdmin",
+      "msg": "The requested admin is invalid."
+    },
+    {
+      "code": 6019,
+      "name": "InvalidGovernanceAuthority",
+      "msg": "The requested governance authority is invalid."
+    },
+    {
+      "code": 6020,
+      "name": "InvalidCollateralAssetConfig",
+      "msg": "The collateral asset configuration is invalid."
+    },
+    {
+      "code": 6021,
+      "name": "InvalidOracleSource",
+      "msg": "The collateral oracle source is invalid for this instruction."
+    },
+    {
+      "code": 6022,
+      "name": "InvalidOraclePrice",
+      "msg": "The cached oracle price is invalid or stale."
+    },
+    {
+      "code": 6023,
+      "name": "CollateralDisabled",
+      "msg": "The collateral asset is disabled."
+    },
+    {
+      "code": 6024,
+      "name": "InvalidCreditFacilityConfig",
+      "msg": "The credit facility configuration is invalid."
+    },
+    {
+      "code": 6025,
+      "name": "InvalidCreditLineConfig",
+      "msg": "The credit line configuration is invalid."
+    },
+    {
+      "code": 6026,
+      "name": "CreditFacilityInactive",
+      "msg": "The credit facility is not active."
+    },
+    {
+      "code": 6027,
+      "name": "CreditLineInactive",
+      "msg": "The credit line is not active."
+    },
+    {
+      "code": 6028,
+      "name": "CreditLimitExceeded",
+      "msg": "The requested draw exceeds the credit line limit."
+    },
+    {
+      "code": 6029,
+      "name": "InsufficientCollateral",
+      "msg": "The credit line does not have enough collateral."
+    },
+    {
+      "code": 6030,
+      "name": "InsufficientCreditHealth",
+      "msg": "The credit line would be undercollateralized."
+    },
+    {
+      "code": 6031,
+      "name": "InsufficientUnderwriterReserve",
+      "msg": "The underwriter vault would fall below required reserves."
+    },
+    {
+      "code": 6032,
+      "name": "CreditLineMatured",
+      "msg": "The credit line has already matured."
+    },
+    {
+      "code": 6033,
+      "name": "NoOutstandingDebt",
+      "msg": "The credit line has no outstanding debt."
+    },
+    {
+      "code": 6034,
+      "name": "CreditLineHealthy",
+      "msg": "The credit line is still healthy."
+    },
+    {
+      "code": 6035,
+      "name": "CreditLineNotDefaulted",
+      "msg": "The credit line is not defaulted."
+    },
+    {
+      "code": 6036,
+      "name": "DeprecatedBuybackPath",
+      "msg": "The legacy buyback transfer path is disabled; use buyback campaigns."
+    },
+    {
+      "code": 6037,
+      "name": "InvalidBuybackCampaignConfig",
+      "msg": "The buyback campaign configuration is invalid."
+    },
+    {
+      "code": 6038,
+      "name": "BuybackCampaignInactive",
+      "msg": "The buyback campaign is not active."
+    },
+    {
+      "code": 6039,
+      "name": "BuybackCampaignNotReady",
+      "msg": "The buyback campaign or slice is not ready."
+    },
+    {
+      "code": 6040,
+      "name": "BuybackSliceTooLarge",
+      "msg": "The buyback slice exceeds campaign limits."
+    },
+    {
+      "code": 6041,
+      "name": "BuybackDeadlineExpired",
+      "msg": "The buyback slice deadline has expired."
+    },
+    {
+      "code": 6042,
+      "name": "InsufficientBuybackOutput",
+      "msg": "The buyback slice did not deliver enough AGC to burn."
+    },
+    {
+      "code": 6043,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow or underflow."
+    },
+    {
+      "code": 6044,
+      "name": "AmountTooLarge",
+      "msg": "A u128 policy amount does not fit into a u64 SPL token amount."
+    },
+    {
+      "code": 6045,
+      "name": "InvalidClock",
+      "msg": "Clock returned a negative timestamp."
+    }
+  ],
+  "types": [
+    {
+      "name": "AdminTransferStarted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "current_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AdminTransferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "previous_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AssetClass",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Stable"
+          },
+          {
+            "name": "Btc"
+          },
+          {
+            "name": "Rwa"
+          },
+          {
+            "name": "Other"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackCampaign",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign_id",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "BuybackCampaignStatus"
+              }
+            }
+          },
+          {
+            "name": "total_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "spent_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "min_total_agc_out",
+            "type": "u64"
+          },
+          {
+            "name": "agc_burned",
+            "type": "u64"
+          },
+          {
+            "name": "max_slice_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "slice_interval_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "started_at",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "type": "u64"
+          },
+          {
+            "name": "last_slice_at",
+            "type": "u64"
+          },
+          {
+            "name": "slice_count",
+            "type": "u64"
+          },
+          {
+            "name": "adapter_usdc_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "agc_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "usdc_escrow_bump",
+            "type": "u8"
+          },
+          {
+            "name": "agc_vault_bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackCampaignCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackCampaignConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "total_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "min_total_agc_out",
+            "type": "u64"
+          },
+          {
+            "name": "max_slice_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "slice_interval_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "start_after",
+            "type": "u64"
+          },
+          {
+            "name": "expires_at",
+            "type": "u64"
+          },
+          {
+            "name": "adapter_usdc_account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackCampaignStarted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign_id",
+            "type": "u64"
+          },
+          {
+            "name": "total_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "min_total_agc_out",
+            "type": "u64"
+          },
+          {
+            "name": "adapter_usdc_account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackCampaignStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Uninitialized"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Completed"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackSliceArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "usdc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "agc_amount_to_burn",
+            "type": "u64"
+          },
+          {
+            "name": "min_agc_out",
+            "type": "u64"
+          },
+          {
+            "name": "deadline",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackTwapSliceExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaign_id",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "agc_burned",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "total_agc_burned",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BuybackUsdcEscrowUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralAsset",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "oracle_source",
+            "type": {
+              "defined": {
+                "name": "OracleSource"
+              }
+            }
+          },
+          {
+            "name": "oracle_feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_price_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "reserve_token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset_class",
+            "type": {
+              "defined": {
+                "name": "AssetClass"
+              }
+            }
+          },
+          {
+            "name": "reserve_weight_bps",
+            "type": "u16"
+          },
+          {
+            "name": "collateral_factor_bps",
+            "type": "u16"
+          },
+          {
+            "name": "liquidation_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_concentration_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_oracle_staleness_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "max_oracle_confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralAssetConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle_source",
+            "type": {
+              "defined": {
+                "name": "OracleSource"
+              }
+            }
+          },
+          {
+            "name": "oracle_feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_price_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "reserve_token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset_class",
+            "type": {
+              "defined": {
+                "name": "AssetClass"
+              }
+            }
+          },
+          {
+            "name": "reserve_weight_bps",
+            "type": "u16"
+          },
+          {
+            "name": "collateral_factor_bps",
+            "type": "u16"
+          },
+          {
+            "name": "liquidation_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_concentration_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_oracle_staleness_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "max_oracle_confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralAssetUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "config",
+            "type": {
+              "defined": {
+                "name": "CollateralAssetConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralOracle",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_source",
+            "type": {
+              "defined": {
+                "name": "OracleSource"
+              }
+            }
+          },
+          {
+            "name": "pyth_price_feed_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "price_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "updated_at",
+            "type": "u64"
+          },
+          {
+            "name": "publish_time",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralOraclePriceInput",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "price_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "confidence_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralOraclePriceUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "price_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "updated_at",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditCollateralDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditCollateralWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditFacility",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility_id",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "underwriter_vault_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "config",
+            "type": {
+              "defined": {
+                "name": "CreditFacilityConfig"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "CreditFacilityStatus"
+              }
+            }
+          },
+          {
+            "name": "underwriter_total_shares",
+            "type": "u64"
+          },
+          {
+            "name": "total_principal_debt_agc",
+            "type": "u64"
+          },
+          {
+            "name": "total_underwriter_deposits_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_underwriter_withdrawals_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_drawn_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_repaid_principal_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_interest_accrued_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_interest_paid_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_defaulted_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_underwriter_loss_agc",
+            "type": "u128"
+          },
+          {
+            "name": "total_collateral_deposited",
+            "type": "u128"
+          },
+          {
+            "name": "total_collateral_seized",
+            "type": "u128"
+          },
+          {
+            "name": "active_credit_lines",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "collateral_vault_bump",
+            "type": "u8"
+          },
+          {
+            "name": "underwriter_vault_bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                256
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditFacilityConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "max_total_debt_agc",
+            "type": "u64"
+          },
+          {
+            "name": "max_line_debt_agc",
+            "type": "u64"
+          },
+          {
+            "name": "min_collateral_health_bps",
+            "type": "u16"
+          },
+          {
+            "name": "liquidation_health_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_underwriter_reserve_bps",
+            "type": "u16"
+          },
+          {
+            "name": "interest_rate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "origination_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "default_grace_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "isolated",
+            "type": "bool"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditFacilityConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "config",
+            "type": {
+              "defined": {
+                "name": "CreditFacilityConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditFacilityInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "facility_id",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "config",
+            "type": {
+              "defined": {
+                "name": "CreditFacilityConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditFacilityStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Uninitialized"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Disabled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLine",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line_id",
+            "type": "u64"
+          },
+          {
+            "name": "credit_limit_agc",
+            "type": "u64"
+          },
+          {
+            "name": "principal_debt_agc",
+            "type": "u64"
+          },
+          {
+            "name": "accrued_interest_agc",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_amount",
+            "type": "u64"
+          },
+          {
+            "name": "maturity_timestamp",
+            "type": "u64"
+          },
+          {
+            "name": "opened_at",
+            "type": "u64"
+          },
+          {
+            "name": "last_accrued_at",
+            "type": "u64"
+          },
+          {
+            "name": "defaulted_at",
+            "type": "u64"
+          },
+          {
+            "name": "closed_at",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "CreditLineStatus"
+              }
+            }
+          },
+          {
+            "name": "underwriter_loss_agc",
+            "type": "u64"
+          },
+          {
+            "name": "uncovered_default_agc",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_seized",
+            "type": "u128"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLineDefaulted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "defaulted_debt",
+            "type": "u64"
+          },
+          {
+            "name": "underwriter_loss",
+            "type": "u64"
+          },
+          {
+            "name": "uncovered_debt",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLineDrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "gross_amount",
+            "type": "u64"
+          },
+          {
+            "name": "net_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLineOpened",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line_id",
+            "type": "u64"
+          },
+          {
+            "name": "credit_limit_agc",
+            "type": "u64"
+          },
+          {
+            "name": "maturity_timestamp",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLineRepaid",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal_paid",
+            "type": "u64"
+          },
+          {
+            "name": "interest_paid",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreditLineStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Uninitialized"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Repaid"
+          },
+          {
+            "name": "Defaulted"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DefaultedCollateralSeized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "line",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochAccumulator",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_id",
+            "type": "u64"
+          },
+          {
+            "name": "started_at",
+            "type": "u64"
+          },
+          {
+            "name": "updated_at",
+            "type": "u64"
+          },
+          {
+            "name": "last_observed_at",
+            "type": "u64"
+          },
+          {
+            "name": "observation_count",
+            "type": "u64"
+          },
+          {
+            "name": "gross_buy_volume_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "gross_sell_volume_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "total_volume_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "last_mid_price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "cumulative_mid_price_time_x18",
+            "type": "u128"
+          },
+          {
+            "name": "cumulative_abs_mid_price_change_bps",
+            "type": "u128"
+          },
+          {
+            "name": "total_hook_fees_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "total_hook_fees_agc",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_id",
+            "type": "u64"
+          },
+          {
+            "name": "regime",
+            "type": {
+              "defined": {
+                "name": "Regime"
+              }
+            }
+          },
+          {
+            "name": "anchor_price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "anchor_next_x18",
+            "type": "u128"
+          },
+          {
+            "name": "normal_floor_x18",
+            "type": "u128"
+          },
+          {
+            "name": "stressed_floor_x18",
+            "type": "u128"
+          },
+          {
+            "name": "price_twap_x18",
+            "type": "u128"
+          },
+          {
+            "name": "premium_bps",
+            "type": "u128"
+          },
+          {
+            "name": "premium_persistence_epochs",
+            "type": "u128"
+          },
+          {
+            "name": "credit_outstanding_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "gross_buy_floor_bps",
+            "type": "u128"
+          },
+          {
+            "name": "net_buy_pressure_bps",
+            "type": "u128"
+          },
+          {
+            "name": "buy_growth_bps",
+            "type": "u128"
+          },
+          {
+            "name": "exit_pressure_bps",
+            "type": "u128"
+          },
+          {
+            "name": "reserve_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "stable_cash_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "liquidity_depth_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "locked_share_bps",
+            "type": "u128"
+          },
+          {
+            "name": "lock_flow_bps",
+            "type": "u128"
+          },
+          {
+            "name": "demand_score_bps",
+            "type": "u128"
+          },
+          {
+            "name": "health_score_bps",
+            "type": "u128"
+          },
+          {
+            "name": "mint_rate_bps",
+            "type": "u128"
+          },
+          {
+            "name": "mint_budget_acp",
+            "type": "u128"
+          },
+          {
+            "name": "buyback_budget_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "stress_score_bps",
+            "type": "u128"
+          },
+          {
+            "name": "gross_buy_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "gross_sell_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "total_volume_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "depth_to_target_slippage_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "stable_cash_reserve_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "risk_weighted_reserve_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "liquidity_depth_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "largest_collateral_concentration_bps",
+            "type": "u16"
+          },
+          {
+            "name": "oracle_confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stale_oracle_count",
+            "type": "u16"
+          },
+          {
+            "name": "realized_volatility_bps",
+            "type": "u128"
+          },
+          {
+            "name": "xagc_deposits_acp",
+            "type": "u128"
+          },
+          {
+            "name": "xagc_gross_redemptions_acp",
+            "type": "u128"
+          },
+          {
+            "name": "treasury_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "treasury_acp",
+            "type": "u128"
+          },
+          {
+            "name": "xagc_total_assets_acp",
+            "type": "u128"
+          },
+          {
+            "name": "mint_allocations",
+            "type": {
+              "defined": {
+                "name": "MintAllocation"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_id",
+            "type": "u64"
+          },
+          {
+            "name": "regime",
+            "type": {
+              "defined": {
+                "name": "Regime"
+              }
+            }
+          },
+          {
+            "name": "anchor_next_x18",
+            "type": "u128"
+          },
+          {
+            "name": "mint_budget_acp",
+            "type": "u128"
+          },
+          {
+            "name": "buyback_budget_quote_x18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExitFeeUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "exit_fee_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ExternalMetrics",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "depth_to_target_slippage_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "stable_cash_reserve_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "risk_weighted_reserve_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "liquidity_depth_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "largest_collateral_concentration_bps",
+            "type": "u16"
+          },
+          {
+            "name": "oracle_confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stale_oracle_count",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceAuthorities",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "risk_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "emergency_admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceAuthoritiesUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authorities",
+            "type": {
+              "defined": {
+                "name": "GovernanceAuthorities"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "GrowthProgramsEnabledUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "enabled",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeProtocolArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "initial_anchor_price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "policy_params",
+            "type": {
+              "defined": {
+                "name": "PolicyParams"
+              }
+            }
+          },
+          {
+            "name": "mint_distribution",
+            "type": {
+              "defined": {
+                "name": "MintDistribution"
+              }
+            }
+          },
+          {
+            "name": "settlement_recipients",
+            "type": {
+              "defined": {
+                "name": "SettlementRecipients"
+              }
+            }
+          },
+          {
+            "name": "exit_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "growth_programs_enabled",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Keeper",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "permissions",
+            "type": {
+              "defined": {
+                "name": "KeeperPermissions"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KeeperPermissions",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_reporter",
+            "type": "bool"
+          },
+          {
+            "name": "oracle_reporter",
+            "type": "bool"
+          },
+          {
+            "name": "epoch_settler",
+            "type": "bool"
+          },
+          {
+            "name": "buyback_executor",
+            "type": "bool"
+          },
+          {
+            "name": "treasury_burner",
+            "type": "bool"
+          },
+          {
+            "name": "credit_operator",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KeeperPermissionsUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "keeper",
+            "type": "pubkey"
+          },
+          {
+            "name": "permissions",
+            "type": {
+              "defined": {
+                "name": "KeeperPermissions"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketAdapterAuthorityUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintAllocation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "xagc_mint_acp",
+            "type": "u128"
+          },
+          {
+            "name": "growth_programs_mint_acp",
+            "type": "u128"
+          },
+          {
+            "name": "lp_mint_acp",
+            "type": "u128"
+          },
+          {
+            "name": "integrators_mint_acp",
+            "type": "u128"
+          },
+          {
+            "name": "treasury_mint_acp",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintDistribution",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "xagc_bps",
+            "type": "u16"
+          },
+          {
+            "name": "growth_programs_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_bps",
+            "type": "u16"
+          },
+          {
+            "name": "integrators_bps",
+            "type": "u16"
+          },
+          {
+            "name": "treasury_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintDistributionUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "distribution",
+            "type": {
+              "defined": {
+                "name": "MintDistribution"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenCreditLineArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "credit_limit_agc",
+            "type": "u64"
+          },
+          {
+            "name": "maturity_timestamp",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleSource",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Manual"
+          },
+          {
+            "name": "Pyth"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PauseFlags",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "xagc_deposits_paused",
+            "type": "bool"
+          },
+          {
+            "name": "xagc_redemptions_paused",
+            "type": "bool"
+          },
+          {
+            "name": "market_reporting_paused",
+            "type": "bool"
+          },
+          {
+            "name": "settlement_paused",
+            "type": "bool"
+          },
+          {
+            "name": "credit_issuance_paused",
+            "type": "bool"
+          },
+          {
+            "name": "collateral_updates_paused",
+            "type": "bool"
+          },
+          {
+            "name": "buybacks_paused",
+            "type": "bool"
+          },
+          {
+            "name": "treasury_burns_paused",
+            "type": "bool"
+          },
+          {
+            "name": "credit_facility_updates_paused",
+            "type": "bool"
+          },
+          {
+            "name": "credit_line_updates_paused",
+            "type": "bool"
+          },
+          {
+            "name": "credit_draws_paused",
+            "type": "bool"
+          },
+          {
+            "name": "credit_repayments_paused",
+            "type": "bool"
+          },
+          {
+            "name": "underwriter_deposits_paused",
+            "type": "bool"
+          },
+          {
+            "name": "underwriter_withdrawals_paused",
+            "type": "bool"
+          },
+          {
+            "name": "liquidations_paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PauseFlagsUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pause_flags",
+            "type": {
+              "defined": {
+                "name": "PauseFlags"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyParametersUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "normal_band_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stressed_band_bps",
+            "type": "u16"
+          },
+          {
+            "name": "policy_epoch_duration",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "normal_band_bps",
+            "type": "u16"
+          },
+          {
+            "name": "stressed_band_bps",
+            "type": "u16"
+          },
+          {
+            "name": "anchor_ema_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_anchor_crawl_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_premium_bps",
+            "type": "u16"
+          },
+          {
+            "name": "premium_persistence_required",
+            "type": "u16"
+          },
+          {
+            "name": "min_gross_buy_floor_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_locked_share_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_gross_buy_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_net_buy_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_lock_flow_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_buy_growth_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_locked_share_bps",
+            "type": "u16"
+          },
+          {
+            "name": "expansion_reserve_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_reserve_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "neutral_reserve_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "defense_reserve_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "hard_defense_reserve_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_stable_cash_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_stable_cash_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "defense_stable_cash_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_liquidity_depth_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_liquidity_depth_coverage_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_reserve_concentration_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_oracle_confidence_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_stale_oracle_count",
+            "type": "u16"
+          },
+          {
+            "name": "max_expansion_volatility_bps",
+            "type": "u16"
+          },
+          {
+            "name": "defense_volatility_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_expansion_exit_pressure_bps",
+            "type": "u16"
+          },
+          {
+            "name": "defense_exit_pressure_bps",
+            "type": "u16"
+          },
+          {
+            "name": "expansion_kappa_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_mint_per_epoch_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_mint_per_day_bps",
+            "type": "u16"
+          },
+          {
+            "name": "buyback_kappa_bps",
+            "type": "u16"
+          },
+          {
+            "name": "mild_defense_spend_bps",
+            "type": "u16"
+          },
+          {
+            "name": "severe_defense_spend_bps",
+            "type": "u16"
+          },
+          {
+            "name": "severe_stress_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "recovery_cooldown_epochs",
+            "type": "u16"
+          },
+          {
+            "name": "policy_epoch_duration",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "agc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xagc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "initial_anchor_price_x18",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "risk_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "emergency_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "agc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "xagc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_usdc",
+            "type": "pubkey"
+          },
+          {
+            "name": "xagc_vault_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "growth_programs_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "integrators_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_usdc_escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_adapter_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_receiver_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "state_bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint_authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "treasury_authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "xagc_authority_bump",
+            "type": "u8"
+          },
+          {
+            "name": "treasury_agc_bump",
+            "type": "u8"
+          },
+          {
+            "name": "treasury_usdc_bump",
+            "type": "u8"
+          },
+          {
+            "name": "xagc_vault_agc_bump",
+            "type": "u8"
+          },
+          {
+            "name": "agc_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "xagc_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "usdc_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "agc_unit",
+            "type": "u64"
+          },
+          {
+            "name": "quote_scale",
+            "type": "u128"
+          },
+          {
+            "name": "exit_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "growth_programs_enabled",
+            "type": "bool"
+          },
+          {
+            "name": "pause_flags",
+            "type": {
+              "defined": {
+                "name": "PauseFlags"
+              }
+            }
+          },
+          {
+            "name": "policy_params",
+            "type": {
+              "defined": {
+                "name": "PolicyParams"
+              }
+            }
+          },
+          {
+            "name": "mint_distribution",
+            "type": {
+              "defined": {
+                "name": "MintDistribution"
+              }
+            }
+          },
+          {
+            "name": "regime",
+            "type": {
+              "defined": {
+                "name": "Regime"
+              }
+            }
+          },
+          {
+            "name": "anchor_price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "premium_persistence_epochs",
+            "type": "u128"
+          },
+          {
+            "name": "last_gross_buy_quote_x18",
+            "type": "u128"
+          },
+          {
+            "name": "last_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_exit_pressure_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_volatility_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_premium_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_locked_share_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_lock_flow_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_stable_cash_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_liquidity_depth_coverage_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_reserve_concentration_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_oracle_confidence_bps",
+            "type": "u128"
+          },
+          {
+            "name": "last_stale_oracle_count",
+            "type": "u16"
+          },
+          {
+            "name": "last_settled_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "last_settlement_timestamp",
+            "type": "u64"
+          },
+          {
+            "name": "recovery_cooldown_epochs_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "mint_window_day",
+            "type": "u64"
+          },
+          {
+            "name": "minted_in_current_day",
+            "type": "u128"
+          },
+          {
+            "name": "pending_treasury_buyback_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "xagc_gross_deposits_total",
+            "type": "u128"
+          },
+          {
+            "name": "xagc_gross_redemptions_total",
+            "type": "u128"
+          },
+          {
+            "name": "xagc_unaccounted_assets",
+            "type": "u64"
+          },
+          {
+            "name": "last_xagc_deposit_total",
+            "type": "u128"
+          },
+          {
+            "name": "last_xagc_redemption_total",
+            "type": "u128"
+          },
+          {
+            "name": "buyback_execution_nonce",
+            "type": "u64"
+          },
+          {
+            "name": "protocol_version",
+            "type": "u16"
+          },
+          {
+            "name": "credit_facility_count",
+            "type": "u64"
+          },
+          {
+            "name": "credit_principal_outstanding_agc",
+            "type": "u128"
+          },
+          {
+            "name": "credit_drawn_agc",
+            "type": "u128"
+          },
+          {
+            "name": "credit_repaid_agc",
+            "type": "u128"
+          },
+          {
+            "name": "credit_interest_paid_agc",
+            "type": "u128"
+          },
+          {
+            "name": "credit_defaulted_agc",
+            "type": "u128"
+          },
+          {
+            "name": "accumulator",
+            "type": {
+              "defined": {
+                "name": "EpochAccumulator"
+              }
+            }
+          },
+          {
+            "name": "last_epoch_result",
+            "type": {
+              "defined": {
+                "name": "EpochResult"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PythReceiverProgramUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "receiver_program",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RecordSwapArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "agc_to_usdc",
+            "type": "bool"
+          },
+          {
+            "name": "hook_fee_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "hook_fee_agc",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Regime",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Neutral"
+          },
+          {
+            "name": "Expansion"
+          },
+          {
+            "name": "Defense"
+          },
+          {
+            "name": "Recovery"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettlementRecipients",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "growth_programs_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "lp_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "integrators_agc",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettlementRecipientsUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "recipients",
+            "type": {
+              "defined": {
+                "name": "SettlementRecipients"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwapRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_id",
+            "type": "u64"
+          },
+          {
+            "name": "agc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "price_x18",
+            "type": "u128"
+          },
+          {
+            "name": "agc_to_usdc",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TreasuryAgcBurned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TreasuryBuybackUsdcReserved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_spent",
+            "type": "u64"
+          },
+          {
+            "name": "pending_treasury_buyback_usdc_after",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnderwriterAgcDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "underwriter",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnderwriterAgcWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "underwriter",
+            "type": "pubkey"
+          },
+          {
+            "name": "assets",
+            "type": "u64"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnderwriterPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "facility",
+            "type": "pubkey"
+          },
+          {
+            "name": "underwriter",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "deposited_agc",
+            "type": "u128"
+          },
+          {
+            "name": "withdrawn_agc",
+            "type": "u128"
+          },
+          {
+            "name": "loss_agc",
+            "type": "u128"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "XagcDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "receiver_xagc",
+            "type": "pubkey"
+          },
+          {
+            "name": "assets",
+            "type": "u64"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "XagcRedeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "receiver_agc",
+            "type": "pubkey"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "gross_assets",
+            "type": "u64"
+          },
+          {
+            "name": "fee_assets",
+            "type": "u64"
+          },
+          {
+            "name": "net_assets",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

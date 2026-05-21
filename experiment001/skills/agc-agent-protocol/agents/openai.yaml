@@ -1,0 +1,4 @@
+interface:
+  display_name: "AGC Agent Protocol"
+  short_description: "Guide builders through the Solana AGC program and credit machine."
+  default_prompt: "Use $agc-agent-protocol to explain Agent Credit Protocol on Solana — AGC/xAGC, policy and reserves, credit facilities, buyback campaigns, and integration entry points."

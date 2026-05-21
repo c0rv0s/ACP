@@ -1,0 +1,8 @@
+[workspace]
+members = ["programs/agc_solana"]
+resolver = "2"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+overflow-checks = true
