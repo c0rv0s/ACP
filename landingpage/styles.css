@@ -110,19 +110,6 @@ a {
   }
 }
 
-@keyframes future-plus {
-  0%,
-  100% {
-    opacity: 0.58;
-    transform: translate(-50%, -50%) scale(1);
-  }
-
-  45% {
-    opacity: 0.9;
-    transform: translate(-50%, -50%) scale(1.18);
-  }
-}
-
 .page-shell {
   display: flex;
   flex-direction: column;
@@ -549,41 +536,11 @@ h3 {
 }
 
 
-.soon-card {
-  background:
-    linear-gradient(125deg, rgba(255, 255, 255, 0.8), rgba(246, 245, 241, 0.66)),
-    #f8f7f3;
-}
-
-.soon-card:hover {
-  border-color: rgba(39, 42, 42, 0.26);
-}
-
-.soon-card .experiment-copy {
-  max-width: calc(100% - 250px);
-}
-
-.soon-card h3 {
-  max-width: 310px;
-  /* text-wrap: balance; */
-}
-
-.soon-card h3,
-.soon-card .rule,
 .future-orbit {
   transition: transform 360ms cubic-bezier(0.2, 0.72, 0.2, 1), opacity 360ms ease;
 }
 
-.soon-card:hover h3 {
-  transform: none;
-}
-
-.soon-card:hover .rule {
-  transform: scaleX(1.45);
-  transform-origin: left center;
-}
-
-.soon-card .stay {
+.stay {
   margin-top: 31px !important;
 }
 
@@ -601,7 +558,7 @@ h3 {
     transform 540ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
-.soon-card:hover .future-orbit {
+.experiment-card:hover .future-orbit {
   border-color: rgba(36, 42, 42, 0.34);
   opacity: 0.9;
   animation: future-wake 1.45s cubic-bezier(0.2, 0.72, 0.2, 1) both;
@@ -636,10 +593,6 @@ h3 {
   left: 6px;
   width: 1px;
   height: 14px;
-}
-
-.soon-card:hover .future-orbit span {
-  animation: future-plus 1.45s ease-in-out both;
 }
 
 @media (max-width: 1400px) {
@@ -734,18 +687,26 @@ h3 {
   }
 
   .hero-art {
-    min-height: 330px;
+    min-height: auto;
   }
 
   .hero-art img {
     --hero-art-x: -50%;
     --hero-art-y: -50%;
-    width: min(650px, 96vw);
+    position: relative;
+    top: auto;
+    left: auto;
+    display: block;
+    width: min(620px, 100%);
+    margin: 0 auto;
+    transform: none;
+    animation-name: reveal-up;
   }
 
   .experiment-grid {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (max-width: 720px) {
@@ -777,7 +738,7 @@ h3 {
   }
 
   .hero-art {
-    min-height: 270px;
+    min-height: auto;
   }
 
   .experiments {
@@ -799,6 +760,11 @@ h3 {
     top: auto;
     transform: scale(0.78);
     transform-origin: bottom right;
+  }
+
+  .future-orbit {
+    right: 22px;
+    bottom: 26px;
   }
 }
 
