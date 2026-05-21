@@ -559,6 +559,15 @@ h3 {
   border-color: rgba(39, 42, 42, 0.26);
 }
 
+.soon-card .experiment-copy {
+  max-width: calc(100% - 250px);
+}
+
+.soon-card h3 {
+  max-width: 310px;
+  /* text-wrap: balance; */
+}
+
 .soon-card h3,
 .soon-card .rule,
 .future-orbit {
@@ -566,7 +575,7 @@ h3 {
 }
 
 .soon-card:hover h3 {
-  transform: translateX(2px);
+  transform: none;
 }
 
 .soon-card:hover .rule {
