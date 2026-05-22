@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "types": ["mocha", "node"],
+    "typeRoots": ["./node_modules/@types"],
+    "lib": ["es2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "es2022",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  }
+}

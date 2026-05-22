@@ -1,0 +1,21 @@
+{
+  "name": "agc-experiment-002",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api": "node src/server.mjs",
+    "dev": "node src/server.mjs",
+    "localnet": "node scripts/start-local-validator.mjs",
+    "localnet:bg": "node scripts/start-local-validator.mjs --background",
+    "localnet:down": "node scripts/stop-local-validator.mjs",
+    "build:solana": "cd solana && anchor build",
+    "deploy:local": "node scripts/deploy-local.mjs",
+    "bootstrap:local": "node scripts/bootstrap-local.mjs",
+    "setup:local": "node scripts/setup-local.mjs",
+    "dev-wallet": "node scripts/print-dev-wallet.mjs",
+    "smoke:local": "node scripts/smoke-wallet-spend.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:solana": "node scripts/test-solana.mjs"
+  }
+}
