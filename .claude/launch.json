@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agc-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "experiment002", "run", "dev"],
+      "port": 8083
+    },
+    {
+      "name": "agc-landing",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8090", "--directory", "/Users/nate/Desktop/agc/landingpage"],
+      "port": 8090
+    }
+  ]
+}

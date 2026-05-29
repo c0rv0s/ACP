@@ -234,6 +234,28 @@ export function riskGradeEnum(grade = "B") {
   return { [key]: {} };
 }
 
+export function approvalModeEnum(mode = "Agentic") {
+  const normalized = String(mode).toLowerCase();
+  if (normalized === "manual") return { manual: {} };
+  if (normalized === "rules") return { rules: {} };
+  return { agentic: {} };
+}
+
+export function borrowerTypeEnum(type = "Business") {
+  const normalized = String(type).toLowerCase();
+  if (normalized === "neobank") return { neobank: {} };
+  if (normalized === "protocol") return { protocol: {} };
+  return { business: {} };
+}
+
+export function verificationStatusEnum(status = "ZkVerified") {
+  const normalized = String(status).toLowerCase();
+  if (normalized === "unverified") return { unverified: {} };
+  if (normalized === "documents") return { documents: {} };
+  if (normalized === "manuallyverified" || normalized === "manual") return { manuallyVerified: {} };
+  return { zkVerified: {} };
+}
+
 export async function airdropIfNeeded(connection, publicKey, minimumSol = 2) {
   const minimumLamports = minimumSol * LAMPORTS_PER_SOL;
   const balance = await connection.getBalance(publicKey, "confirmed");

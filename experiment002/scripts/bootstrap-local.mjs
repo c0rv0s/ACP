@@ -5,7 +5,6 @@ import {
   DEFAULT_RPC_URL,
   IDL_PATH,
   KEY_DIR,
-  LAMPORTS_PER_SOL,
   PROGRAM_KEYPAIR_PATH,
   PROGRAM_SO_PATH,
   PublicKey,
@@ -14,8 +13,10 @@ import {
   TOKEN_PROGRAM_ID,
   airdropIfNeeded,
   anchor,
+  approvalModeEnum,
   bn,
   bnUsdc,
+  borrowerTypeEnum,
   bytes,
   createProgram,
   createProvider,
@@ -24,10 +25,12 @@ import {
   getOrCreateKeypair,
   hashBytes,
   keyPaths,
+  riskGradeEnum,
   saveKeypair,
   seed16,
   splToken,
   toBuffer,
+  verificationStatusEnum,
   web3,
   writeDeployment,
 } from "../src/chain.mjs";
@@ -39,14 +42,15 @@ ensureDir(KEY_DIR);
 
 const keys = keyPaths();
 const admin = getOrCreateKeypair(keys.admin);
+
+// The local demo intentionally uses one imported wallet for every role so the
+// browser can exercise the full workflow through wallet-signed transactions.
 saveKeypair(keys.router, admin);
 saveKeypair(keys.underwriter, admin);
 saveKeypair(keys.revenuePayer, admin);
-const router = admin;
-const underwriter = admin;
-const revenuePayer = admin;
-const agentWallet = getOrCreateKeypair(keys.agentWallet);
-const merchantOwner = getOrCreateKeypair(keys.merchantOwner);
+const poolManager = admin;
+const borrowerOperator = admin;
+const repaymentPayer = admin;
 
 await airdropIfNeeded(connection, admin.publicKey, 5);
 
@@ -54,207 +58,164 @@ const provider = createProvider(admin, rpcUrl);
 anchor.setProvider(provider);
 const program = createProgram(provider);
 const programId = program.programId;
+
 const usdcMint = await splToken.createMint(connection, admin, admin.publicKey, null, 6);
-
 const createTokenAccount = (owner) => splToken.createAccount(connection, admin, usdcMint, owner, web3.Keypair.generate());
-const underwriterUsdc = await createTokenAccount(underwriter.publicKey);
-const revenuePayerUsdc = await createTokenAccount(revenuePayer.publicKey);
-const merchantUsdc = await createTokenAccount(merchantOwner.publicKey);
-const borrowerReceivableUsdc = await createTokenAccount(admin.publicKey);
+const poolManagerUsdc = await createTokenAccount(poolManager.publicKey);
+const borrowerUsdc = await createTokenAccount(borrowerOperator.publicKey);
+const repaymentPayerUsdc = await createTokenAccount(repaymentPayer.publicKey);
 
-await splToken.mintTo(connection, admin, usdcMint, underwriterUsdc, admin, 1_000n * 1_000_000n);
-await splToken.mintTo(connection, admin, usdcMint, revenuePayerUsdc, admin, 1_000n * 1_000_000n);
+await splToken.mintTo(connection, admin, usdcMint, poolManagerUsdc, admin, 10_000n * 1_000_000n);
+await splToken.mintTo(connection, admin, usdcMint, repaymentPayerUsdc, admin, 2_000n * 1_000_000n);
 
-const workflowSeed = seed16(40);
+const applicationSeed = seed16(40);
 const lineSeed = seed16(80);
-const searchMerchantHash = hashBytes(20);
-const blockedMerchantHash = hashBytes(60);
-const scoreVersionHash = hashBytes(200);
+const scoreHash = hashBytes(200);
 
-const protocolConfig = findPda([Buffer.from("protocol")], programId);
-const borrower = findPda([Buffer.from("borrower"), admin.publicKey.toBuffer()], programId);
-const agent = findPda([Buffer.from("agent"), borrower.toBuffer(), agentWallet.publicKey.toBuffer()], programId);
-const workflow = findPda([Buffer.from("workflow"), agent.toBuffer(), toBuffer(workflowSeed)], programId);
-const searchMerchant = findPda([Buffer.from("merchant"), toBuffer(searchMerchantHash)], programId);
-const blockedMerchant = findPda([Buffer.from("merchant"), toBuffer(blockedMerchantHash)], programId);
-const policy = findPda([Buffer.from("policy"), workflow.toBuffer()], programId);
-const underwriterVault = findPda([Buffer.from("underwriter-vault"), underwriter.publicKey.toBuffer()], programId);
-const vaultAuthority = findPda([Buffer.from("underwriter-vault-authority"), underwriterVault.toBuffer()], programId);
-const vaultUsdc = findPda([Buffer.from("underwriter-vault-usdc"), underwriterVault.toBuffer()], programId);
-const creditLine = findPda(
-  [Buffer.from("credit-line"), workflow.toBuffer(), underwriterVault.toBuffer(), toBuffer(lineSeed)],
+const marketConfig = findPda([Buffer.from("market")], programId);
+const feeVaultAuthority = findPda([Buffer.from("fee-vault-authority")], programId);
+const feeVault = findPda([Buffer.from("fee-vault-usdc")], programId);
+const borrower = findPda([Buffer.from("borrower"), borrowerOperator.publicKey.toBuffer()], programId);
+const liquidityPool = findPda([Buffer.from("liquidity-pool"), poolManager.publicKey.toBuffer()], programId);
+const poolAuthority = findPda([Buffer.from("pool-authority"), liquidityPool.toBuffer()], programId);
+const poolUsdc = findPda([Buffer.from("pool-usdc"), liquidityPool.toBuffer()], programId);
+const creditApplication = findPda(
+  [Buffer.from("credit-application"), borrower.toBuffer(), liquidityPool.toBuffer(), toBuffer(applicationSeed)],
   programId,
 );
-const scoreAttestation = findPda(
-  [Buffer.from("score"), creditLine.toBuffer(), toBuffer(scoreVersionHash)],
-  programId,
-);
-
-const zero = new PublicKey("11111111111111111111111111111111");
-const pubkeyArray = (first, second = zero) => [first, second, ...Array.from({ length: 6 }, () => zero)];
-const u16Array = (first, second = 0) => [first, second, ...Array.from({ length: 6 }, () => 0)];
+const creditLine = findPda([Buffer.from("credit-line"), creditApplication.toBuffer(), toBuffer(lineSeed)], programId);
+const creditAttestation = findPda([Buffer.from("attestation"), borrower.toBuffer(), toBuffer(scoreHash)], programId);
 
 await program.methods
-  .initializeProtocol({
+  .initializeMarket({
     riskAdmin: admin.publicKey,
     emergencyAdmin: admin.publicKey,
-    paymentRouter: router.publicKey,
-    maxTotalLiveCapitalAtRiskUsdc: bnUsdc("5000"),
-    maxSingleBorrowerLimitUsdc: bnUsdc("250"),
-    maxUnsecuredExposurePerBorrowerUsdc: bnUsdc("100"),
-    maxDailyTotalSpendUsdc: bnUsdc("1000"),
-    maxLossBudgetUsdc: bnUsdc("500"),
-  })
-  .accounts({ protocolConfig, usdcMint, admin: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .registerBorrower({
-    primaryWallet: admin.publicKey,
-    metadataHash: bytes(32, 1),
-    borrowerType: { company: {} },
-    verificationStatus: { manual: {} },
-  })
-  .accounts({ protocolConfig, borrower, operator: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .registerAgent({
-    wallet: agentWallet.publicKey,
-    metadataHash: bytes(32, 2),
-    framework: { custom: {} },
-  })
-  .accounts({ protocolConfig, borrower, agent, operator: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .createWorkflow({
-    workflowSeed,
-    metadataHash: bytes(32, 3),
-  })
-  .accounts({ protocolConfig, agent, workflow, operator: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .registerMerchant({
-    merchantIdHash: searchMerchantHash,
-    metadataHash: bytes(32, 4),
-    category: 101,
-    status: { active: {} },
-    adapter: { mock: {} },
-  })
-  .accounts({ protocolConfig, merchant: searchMerchant, authority: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .registerMerchant({
-    merchantIdHash: blockedMerchantHash,
-    metadataHash: bytes(32, 5),
-    category: 999,
-    status: { blocked: {} },
-    adapter: { mock: {} },
-  })
-  .accounts({ protocolConfig, merchant: blockedMerchant, authority: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .createSpendPolicy({
-    metadataHash: bytes(32, 6),
-    maxPerTransactionUsdc: bnUsdc("25"),
-    maxDailySpendUsdc: bnUsdc("25"),
-    maxWeeklySpendUsdc: bnUsdc("100"),
-    allowedMerchants: pubkeyArray(searchMerchant),
-    allowedMerchantCount: 1,
-    blockedMerchants: pubkeyArray(blockedMerchant),
-    blockedMerchantCount: 1,
-    allowedCategories: u16Array(101),
-    allowedCategoryCount: 1,
-    humanApprovalThresholdUsdc: bnUsdc("10"),
-    revenueSweepBps: 3000,
-    minAvailableLimitAfterSpendUsdc: bn(0),
-    cooldownAfterPolicyViolationSeconds: bn(3600),
-  })
-  .accounts({ protocolConfig, borrower, workflow, policy, operator: admin.publicKey, systemProgram: SystemProgram.programId })
-  .rpc();
-
-await program.methods
-  .createUnderwriterVault({
-    metadataHash: bytes(32, 7),
-    maxSingleLineUsdc: bnUsdc("250"),
+    platformFeeBps: 10,
+    maxTotalCreditUsdc: bnUsdc("5000"),
+    maxSingleBorrowerUsdc: bnUsdc("1000"),
   })
   .accounts({
-    protocolConfig,
-    underwriterVault,
-    vaultAuthority,
-    usdcVault: vaultUsdc,
+    marketConfig,
+    feeVaultAuthority,
+    feeVault,
     usdcMint,
-    underwriter: underwriter.publicKey,
+    admin: admin.publicKey,
     tokenProgram: TOKEN_PROGRAM_ID,
     systemProgram: SystemProgram.programId,
     rent: web3.SYSVAR_RENT_PUBKEY,
   })
-  .signers([underwriter])
   .rpc();
 
 await program.methods
-  .fundUnderwriterVault(bnUsdc("500"))
+  .registerBorrower({
+    primaryWallet: borrowerOperator.publicKey,
+    metadataHash: bytes(32, 1),
+    borrowerType: borrowerTypeEnum("Business"),
+    verificationStatus: verificationStatusEnum("ZkVerified"),
+    trustScore: 858,
+  })
+  .accounts({ marketConfig, borrower, operator: borrowerOperator.publicKey, systemProgram: SystemProgram.programId })
+  .rpc();
+
+await program.methods
+  .createLiquidityPool({
+    metadataHash: bytes(32, 2),
+    policyHash: bytes(32, 3),
+    approvalMode: approvalModeEnum("Agentic"),
+    maxSingleLineUsdc: bnUsdc("1000"),
+    minTrustScore: 720,
+    maxAprBps: 1400,
+    autoApproveUnderUsdc: bnUsdc("100"),
+  })
   .accounts({
-    protocolConfig,
-    underwriterVault,
-    underwriterUsdc,
-    vaultUsdc,
-    underwriter: underwriter.publicKey,
+    marketConfig,
+    liquidityPool,
+    vaultAuthority: poolAuthority,
+    usdcVault: poolUsdc,
+    usdcMint,
+    manager: poolManager.publicKey,
+    tokenProgram: TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+    rent: web3.SYSVAR_RENT_PUBKEY,
+  })
+  .rpc();
+
+await program.methods
+  .fundLiquidityPool(bnUsdc("2500"))
+  .accounts({
+    marketConfig,
+    liquidityPool,
+    managerUsdc: poolManagerUsdc,
+    poolUsdcVault: poolUsdc,
+    manager: poolManager.publicKey,
     tokenProgram: TOKEN_PROGRAM_ID,
   })
-  .signers([underwriter])
   .rpc();
 
 await program.methods
-  .approveCreditLine({
-    lineSeed,
-    metadataHash: bytes(32, 8),
-    principalLimitUsdc: bnUsdc("100"),
-    aprBps: 1800,
-    originationFeeBps: 0,
-    tenorSeconds: bn(7 * 24 * 60 * 60),
-    gracePeriodSeconds: bn(48 * 60 * 60),
-    riskGrade: { b: {} },
-    repaymentRule: zero,
+  .submitCreditApplication({
+    applicationSeed,
+    metadataHash: bytes(32, 4),
+    requestedLimitUsdc: bnUsdc("500"),
+    proposedAprBps: 875,
+    collateralizationBps: 12000,
   })
   .accounts({
-    protocolConfig,
+    marketConfig,
     borrower,
-    workflow,
-    policy,
-    underwriterVault,
+    liquidityPool,
+    creditApplication,
+    operator: borrowerOperator.publicKey,
+    systemProgram: SystemProgram.programId,
+  })
+  .rpc();
+
+await program.methods
+  .approveCreditApplication({
+    lineSeed,
+    metadataHash: bytes(32, 5),
+    approvedLimitUsdc: bnUsdc("500"),
+    aprBps: 875,
+    tenorSeconds: bn(365 * 24 * 60 * 60),
+    riskGrade: riskGradeEnum("A"),
+  })
+  .accounts({
+    marketConfig,
+    borrower,
+    liquidityPool,
+    creditApplication,
     creditLine,
+    borrowerUsdc,
     authority: admin.publicKey,
     systemProgram: SystemProgram.programId,
   })
   .rpc();
 
 await program.methods
-  .activateCreditLine()
-  .accounts({ protocolConfig, creditLine, authority: admin.publicKey })
-  .rpc();
-
-await program.methods
-  .updateScoreAttestation({
-    scoreVersionHash,
-    score: 742,
-    riskGrade: { b: {} },
-    recommendedLimitUsdc: bnUsdc("100"),
-    recommendedAprBps: 1800,
-    pdEstimateBps: 900,
-    lgdEstimateBps: 4200,
-    confidenceBps: 5400,
-    featuresHash: bytes(32, 9),
+  .updateCreditAttestation({
+    scoreHash,
+    score: 858,
+    trustScore: 858,
+    riskGrade: riskGradeEnum("A"),
+    recommendedLimitUsdc: bnUsdc("500"),
+    recommendedAprBps: 875,
+    pdEstimateBps: 140,
+    lgdEstimateBps: 2200,
+    confidenceBps: 9300,
+    featuresHash: bytes(32, 6),
   })
-  .accounts({ protocolConfig, creditLine, scoreAttestation, authority: admin.publicKey, systemProgram: SystemProgram.programId })
+  .accounts({
+    marketConfig,
+    borrower,
+    creditLine,
+    creditAttestation,
+    authority: admin.publicKey,
+    systemProgram: SystemProgram.programId,
+  })
   .rpc();
 
 const deployment = {
-  version: 1,
+  version: 2,
   generatedAt: new Date().toISOString(),
   rpcUrl,
   programId: programId.toBase58(),
@@ -265,40 +226,32 @@ const deployment = {
   keys,
   publicKeys: {
     admin: admin.publicKey.toBase58(),
-    router: router.publicKey.toBase58(),
-    underwriter: underwriter.publicKey.toBase58(),
-    revenuePayer: revenuePayer.publicKey.toBase58(),
-    agentWallet: agentWallet.publicKey.toBase58(),
-    merchantOwner: merchantOwner.publicKey.toBase58(),
+    riskAdmin: admin.publicKey.toBase58(),
+    poolManager: poolManager.publicKey.toBase58(),
+    borrowerOperator: borrowerOperator.publicKey.toBase58(),
+    repaymentPayer: repaymentPayer.publicKey.toBase58(),
   },
   seeds: {
-    workflowSeed,
+    applicationSeed,
     lineSeed,
-    searchMerchantHash,
-    blockedMerchantHash,
-    scoreVersionHash,
+    scoreHash,
   },
   addresses: {
-    protocolConfig: protocolConfig.toBase58(),
+    marketConfig: marketConfig.toBase58(),
+    feeVaultAuthority: feeVaultAuthority.toBase58(),
+    feeVault: feeVault.toBase58(),
     borrower: borrower.toBase58(),
-    agent: agent.toBase58(),
-    workflow: workflow.toBase58(),
-    policy: policy.toBase58(),
-    underwriterVault: underwriterVault.toBase58(),
-    vaultAuthority: vaultAuthority.toBase58(),
-    vaultUsdc: vaultUsdc.toBase58(),
+    liquidityPool: liquidityPool.toBase58(),
+    poolAuthority: poolAuthority.toBase58(),
+    poolUsdc: poolUsdc.toBase58(),
+    creditApplication: creditApplication.toBase58(),
     creditLine: creditLine.toBase58(),
-    scoreAttestation: scoreAttestation.toBase58(),
+    creditAttestation: creditAttestation.toBase58(),
     usdcMint: usdcMint.toBase58(),
-    merchants: {
-      search: searchMerchant.toBase58(),
-      blocked: blockedMerchant.toBase58(),
-    },
     tokenAccounts: {
-      underwriterUsdc: underwriterUsdc.toBase58(),
-      revenuePayerUsdc: revenuePayerUsdc.toBase58(),
-      merchantUsdc: merchantUsdc.toBase58(),
-      borrowerReceivableUsdc: borrowerReceivableUsdc.toBase58(),
+      poolManagerUsdc: poolManagerUsdc.toBase58(),
+      borrowerUsdc: borrowerUsdc.toBase58(),
+      repaymentPayerUsdc: repaymentPayerUsdc.toBase58(),
     },
   },
 };
@@ -306,7 +259,7 @@ const deployment = {
 writeDeployment(deployment);
 fs.rmSync(ACTION_LOG_PATH, { force: true });
 
-console.log("Bootstrapped local AGC credit sandbox");
+console.log("Bootstrapped local Agent Credit market");
 console.log(`RPC: ${rpcUrl}`);
 console.log(`Program: ${programId.toBase58()}`);
 console.log(`Credit line: ${creditLine.toBase58()}`);

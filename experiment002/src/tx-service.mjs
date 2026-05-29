@@ -1,5 +1,4 @@
 import {
-  PublicKey,
   SystemProgram,
   TOKEN_PROGRAM_ID,
   anchor,
@@ -16,7 +15,6 @@ import {
   pubkeyString,
   randomByteArray,
   riskGradeEnum,
-  sourceEnum,
   toBuffer,
   web3,
 } from "./chain.mjs";
@@ -33,6 +31,7 @@ export function createTxService() {
       return {
         ok: true,
         service: "agc-experiment-002",
+        product: "agent-credit-market",
         signing: "wallet",
         rpcUrl: deployment.rpcUrl,
         programId: deployment.programId,
@@ -56,43 +55,37 @@ export function createTxService() {
 }
 
 async function readState(deployment, connection) {
-  const program = programFor(connection, new PublicKey(deployment.publicKeys.admin));
+  const program = programFor(connection, new web3.PublicKey(deployment.publicKeys.admin));
   const addresses = deployment.addresses;
   const account = program.account;
   const [
-    protocol,
+    market,
     borrower,
-    agent,
-    workflow,
-    policy,
-    vault,
-    line,
-    searchMerchant,
-    blockedMerchant,
-    spendAuthorizations,
-    scores,
-    vaultBalance,
-    underwriterBalance,
-    revenueBalance,
-    merchantBalance,
-    borrowerReceivableBalance,
+    liquidityPool,
+    creditApplication,
+    creditLine,
+    creditAttestation,
+    allApplications,
+    allAttestations,
+    poolBalance,
+    feeBalance,
+    managerBalance,
+    borrowerBalance,
+    repaymentPayerBalance,
   ] = await Promise.all([
-    fetchNullable(account.protocolConfig, addresses.protocolConfig),
+    fetchNullable(account.marketConfig, addresses.marketConfig),
     fetchNullable(account.borrowerProfile, addresses.borrower),
-    fetchNullable(account.agentProfile, addresses.agent),
-    fetchNullable(account.workflowProfile, addresses.workflow),
-    fetchNullable(account.spendPolicy, addresses.policy),
-    fetchNullable(account.underwriterVault, addresses.underwriterVault),
+    fetchNullable(account.liquidityPool, addresses.liquidityPool),
+    fetchNullable(account.creditApplication, addresses.creditApplication),
     fetchNullable(account.creditLine, addresses.creditLine),
-    fetchNullable(account.merchant, addresses.merchants.search),
-    fetchNullable(account.merchant, addresses.merchants.blocked),
-    account.spendAuthorization.all().catch(() => []),
-    account.scoreAttestation.all().catch(() => []),
-    getTokenAmount(connection, addresses.vaultUsdc),
-    getTokenAmount(connection, addresses.tokenAccounts.underwriterUsdc),
-    getTokenAmount(connection, addresses.tokenAccounts.revenuePayerUsdc),
-    getTokenAmount(connection, addresses.tokenAccounts.merchantUsdc),
-    getTokenAmount(connection, addresses.tokenAccounts.borrowerReceivableUsdc),
+    fetchNullable(account.creditAttestation, addresses.creditAttestation),
+    account.creditApplication.all().catch(() => []),
+    account.creditAttestation.all().catch(() => []),
+    getTokenAmount(connection, addresses.poolUsdc),
+    getTokenAmount(connection, addresses.feeVault),
+    getTokenAmount(connection, addresses.tokenAccounts.poolManagerUsdc),
+    getTokenAmount(connection, addresses.tokenAccounts.borrowerUsdc),
+    getTokenAmount(connection, addresses.tokenAccounts.repaymentPayerUsdc),
   ]);
 
   const signatures = await connection
@@ -102,88 +95,103 @@ async function readState(deployment, connection) {
   return {
     deployment: publicDeployment(deployment),
     accounts: {
-      protocol: protocol && {
-        paused: protocol.paused,
-        admin: pubkeyString(protocol.admin),
-        paymentRouter: pubkeyString(protocol.paymentRouter),
-        totalLiveCapitalAtRiskUsdc: formatUsdc(protocol.totalLiveCapitalAtRiskUsdc),
-        totalDailySpendUsdc: formatUsdc(protocol.totalDailySpendUsdc),
-        totalDefaultedUsdc: formatUsdc(protocol.totalDefaultedUsdc),
-        maxLossBudgetUsdc: formatUsdc(protocol.maxLossBudgetUsdc),
+      market: market && {
+        paused: market.paused,
+        admin: pubkeyString(market.admin),
+        riskAdmin: pubkeyString(market.riskAdmin),
+        platformFeeBps: market.platformFeeBps,
+        maxTotalCreditUsdc: formatUsdc(market.maxTotalCreditUsdc),
+        maxSingleBorrowerUsdc: formatUsdc(market.maxSingleBorrowerUsdc),
+        totalLiquidityUsdc: formatUsdc(market.totalLiquidityUsdc),
+        totalCreditLimitUsdc: formatUsdc(market.totalCreditLimitUsdc),
+        totalOutstandingUsdc: formatUsdc(market.totalOutstandingUsdc),
+        totalPlatformFeesUsdc: formatUsdc(market.totalPlatformFeesUsdc),
       },
       borrower: borrower && {
         status: enumName(borrower.status),
         verificationStatus: enumName(borrower.verificationStatus),
+        borrowerType: enumName(borrower.borrowerType),
         operator: pubkeyString(borrower.operator),
-        totalPrincipalLimitUsdc: formatUsdc(borrower.totalPrincipalLimitUsdc),
+        primaryWallet: pubkeyString(borrower.primaryWallet),
+        trustScore: borrower.trustScore,
+        totalCreditLimitUsdc: formatUsdc(borrower.totalCreditLimitUsdc),
         totalOutstandingUsdc: formatUsdc(borrower.totalOutstandingUsdc),
+        repaymentCount: borrower.repaymentCount,
+        delinquencyCount: borrower.delinquencyCount,
       },
-      agent: agent && {
-        status: enumName(agent.status),
-        wallet: pubkeyString(agent.wallet),
-        lastActiveAt: timestamp(agent.lastActiveAt),
+      liquidityPool: liquidityPool && {
+        status: enumName(liquidityPool.status),
+        approvalMode: enumName(liquidityPool.approvalMode),
+        manager: pubkeyString(liquidityPool.manager),
+        committedCapitalUsdc: formatUsdc(liquidityPool.committedCapitalUsdc),
+        availableCapitalUsdc: formatUsdc(liquidityPool.availableCapitalUsdc),
+        committedToLinesUsdc: formatUsdc(liquidityPool.committedToLinesUsdc),
+        principalDrawnUsdc: formatUsdc(liquidityPool.principalDrawnUsdc),
+        principalRepaidUsdc: formatUsdc(liquidityPool.principalRepaidUsdc),
+        platformFeesPaidUsdc: formatUsdc(liquidityPool.platformFeesPaidUsdc),
+        maxSingleLineUsdc: formatUsdc(liquidityPool.maxSingleLineUsdc),
+        minTrustScore: liquidityPool.minTrustScore,
+        maxAprBps: liquidityPool.maxAprBps,
+        autoApproveUnderUsdc: formatUsdc(liquidityPool.autoApproveUnderUsdc),
       },
-      workflow: workflow && {
-        status: enumName(workflow.status),
-        policy: pubkeyString(workflow.policy),
+      creditApplication: creditApplication && {
+        status: enumName(creditApplication.status),
+        approvalMode: enumName(creditApplication.approvalMode),
+        requestedLimitUsdc: formatUsdc(creditApplication.requestedLimitUsdc),
+        proposedAprBps: creditApplication.proposedAprBps,
+        collateralizationBps: creditApplication.collateralizationBps,
+        trustScoreSnapshot: creditApplication.trustScoreSnapshot,
+        reviewedAt: timestamp(creditApplication.reviewedAt),
+        reviewer: pubkeyString(creditApplication.reviewer),
       },
-      policy: policy && {
-        version: policy.version,
-        status: enumName(policy.status),
-        maxPerTransactionUsdc: formatUsdc(policy.maxPerTransactionUsdc),
-        maxDailySpendUsdc: formatUsdc(policy.maxDailySpendUsdc),
-        maxWeeklySpendUsdc: formatUsdc(policy.maxWeeklySpendUsdc),
-        humanApprovalThresholdUsdc: formatUsdc(policy.humanApprovalThresholdUsdc),
-        revenueSweepBps: policy.revenueSweepBps,
-        dailySpendUsdc: formatUsdc(policy.dailySpendUsdc),
-        weeklySpendUsdc: formatUsdc(policy.weeklySpendUsdc),
+      creditLine: creditLine && {
+        status: enumName(creditLine.status),
+        riskGrade: enumName(creditLine.riskGrade),
+        principalLimitUsdc: formatUsdc(creditLine.principalLimitUsdc),
+        availableLimitUsdc: formatUsdc(creditLine.availableLimitUsdc),
+        principalOutstandingUsdc: formatUsdc(creditLine.principalOutstandingUsdc),
+        principalRepaidUsdc: formatUsdc(creditLine.principalRepaidUsdc),
+        platformFeesPaidUsdc: formatUsdc(creditLine.platformFeesPaidUsdc),
+        aprBps: creditLine.aprBps,
+        platformFeeBps: creditLine.platformFeeBps,
+        collateralizationBps: creditLine.collateralizationBps,
+        maturityAt: timestamp(creditLine.maturityAt),
+        lastDrawAt: timestamp(creditLine.lastDrawAt),
+        lastRepaymentAt: timestamp(creditLine.lastRepaymentAt),
       },
-      underwriterVault: vault && {
-        status: enumName(vault.status),
-        committedCapitalUsdc: formatUsdc(vault.committedCapitalUsdc),
-        availableCapitalUsdc: formatUsdc(vault.availableCapitalUsdc),
-        committedToLinesUsdc: formatUsdc(vault.committedToLinesUsdc),
-        principalDrawnUsdc: formatUsdc(vault.principalDrawnUsdc),
-        principalRepaidUsdc: formatUsdc(vault.principalRepaidUsdc),
-        interestEarnedUsdc: formatUsdc(vault.interestEarnedUsdc),
-        lossRealizedUsdc: formatUsdc(vault.lossRealizedUsdc),
-      },
-      creditLine: line && {
-        status: enumName(line.status),
-        riskGrade: riskGradeName(line.riskGrade),
-        principalLimitUsdc: formatUsdc(line.principalLimitUsdc),
-        availableLimitUsdc: formatUsdc(line.availableLimitUsdc),
-        reservedSpendUsdc: formatUsdc(line.reservedSpendUsdc),
-        principalOutstandingUsdc: formatUsdc(line.principalOutstandingUsdc),
-        accruedInterestUsdc: formatUsdc(line.accruedInterestUsdc),
-        feesDueUsdc: formatUsdc(line.feesDueUsdc),
-        aprBps: line.aprBps,
-        maturityAt: timestamp(line.maturityAt),
-      },
-      merchants: {
-        search: searchMerchant && { address: addresses.merchants.search, status: enumName(searchMerchant.status), category: searchMerchant.category },
-        blocked: blockedMerchant && { address: addresses.merchants.blocked, status: enumName(blockedMerchant.status), category: blockedMerchant.category },
+      creditAttestation: creditAttestation && {
+        score: creditAttestation.score,
+        trustScore: creditAttestation.trustScore,
+        riskGrade: enumName(creditAttestation.riskGrade),
+        recommendedLimitUsdc: formatUsdc(creditAttestation.recommendedLimitUsdc),
+        recommendedAprBps: creditAttestation.recommendedAprBps,
+        pdEstimateBps: creditAttestation.pdEstimateBps,
+        lgdEstimateBps: creditAttestation.lgdEstimateBps,
+        confidenceBps: creditAttestation.confidenceBps,
+        createdAt: timestamp(creditAttestation.createdAt),
       },
     },
     tokenBalances: {
-      vaultUsdc: balance(vaultBalance),
-      underwriterUsdc: balance(underwriterBalance),
-      revenuePayerUsdc: balance(revenueBalance),
-      merchantUsdc: balance(merchantBalance),
-      borrowerReceivableUsdc: balance(borrowerReceivableBalance),
+      poolUsdc: balance(poolBalance),
+      feeVaultUsdc: balance(feeBalance),
+      poolManagerUsdc: balance(managerBalance),
+      borrowerUsdc: balance(borrowerBalance),
+      repaymentPayerUsdc: balance(repaymentPayerBalance),
     },
-    spendAuthorizations: spendAuthorizations.map(({ publicKey, account: item }) => ({
+    applications: allApplications.map(({ publicKey, account: item }) => ({
       address: publicKey.toBase58(),
-      amountUsdc: formatUsdc(item.amountUsdc),
-      merchant: pubkeyString(item.merchant),
       status: enumName(item.status),
-      reasonCode: enumName(item.reasonCode),
+      approvalMode: enumName(item.approvalMode),
+      requestedLimitUsdc: formatUsdc(item.requestedLimitUsdc),
+      proposedAprBps: item.proposedAprBps,
+      trustScoreSnapshot: item.trustScoreSnapshot,
       createdAt: timestamp(item.createdAt),
     })),
-    scoreAttestations: scores.map(({ publicKey, account: item }) => ({
+    attestations: allAttestations.map(({ publicKey, account: item }) => ({
       address: publicKey.toBase58(),
       score: item.score,
-      riskGrade: riskGradeName(item.riskGrade),
+      trustScore: item.trustScore,
+      riskGrade: enumName(item.riskGrade),
       recommendedLimitUsdc: formatUsdc(item.recommendedLimitUsdc),
       recommendedAprBps: item.recommendedAprBps,
       confidenceBps: item.confidenceBps,
@@ -205,160 +213,103 @@ async function buildTransaction(deployment, connection, kind, body) {
   const instructions = [];
   const meta = { kind };
 
-  if (kind === "spend") {
-    const spendId = randomByteArray(16);
-    const merchantKey = body.merchant === "blocked" ? addresses.merchants.blocked : addresses.merchants.search;
-    const spendAuthorization = findPda(
-      [Buffer.from("spend-auth"), pubkey(addresses.creditLine).toBuffer(), toBuffer(spendId)],
-      program.programId,
-    );
+  if (kind === "fund-pool") {
     instructions.push(
       await program.methods
-        .reserveSpend({
-          spendId,
-          amountUsdc: bnUsdc(body.amountUsdc ?? "2.50"),
-          purposeHash: bytes(32, 31),
-          authorizationTtlSeconds: bn(300),
-        })
+        .fundLiquidityPool(bnUsdc(body.amountUsdc ?? "100.00"))
         .accounts({
-          protocolConfig: addresses.protocolConfig,
-          borrower: addresses.borrower,
-          creditLine: addresses.creditLine,
-          policy: addresses.policy,
-          merchant: merchantKey,
-          spendAuthorization,
-          router: wallet,
-          systemProgram: SystemProgram.programId,
-        })
-        .instruction(),
-    );
-    instructions.push(
-      await program.methods
-        .settleSpend()
-        .accounts({
-          protocolConfig: addresses.protocolConfig,
-          borrower: addresses.borrower,
-          creditLine: addresses.creditLine,
-          spendAuthorization,
-          underwriterVault: addresses.underwriterVault,
-          vaultAuthority: addresses.vaultAuthority,
-          underwriterUsdcVault: addresses.vaultUsdc,
-          merchantUsdc: addresses.tokenAccounts.merchantUsdc,
-          router: wallet,
+          marketConfig: addresses.marketConfig,
+          liquidityPool: addresses.liquidityPool,
+          managerUsdc: addresses.tokenAccounts.poolManagerUsdc,
+          poolUsdcVault: addresses.poolUsdc,
+          manager: wallet,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .instruction(),
     );
-    meta.spendAuthorization = spendAuthorization.toBase58();
-  } else if (kind === "revenue") {
+  } else if (kind === "draw") {
     instructions.push(
       await program.methods
-        .recordRevenueAndSweep(bnUsdc(body.amountUsdc ?? "50.00"), sourceEnum(body.source ?? "manual"), randomByteArray(32))
+        .drawCredit(bnUsdc(body.amountUsdc ?? "75.00"))
         .accounts({
-          protocolConfig: addresses.protocolConfig,
+          marketConfig: addresses.marketConfig,
           borrower: addresses.borrower,
+          liquidityPool: addresses.liquidityPool,
           creditLine: addresses.creditLine,
-          policy: addresses.policy,
-          underwriterVault: addresses.underwriterVault,
-          revenueSourceUsdc: addresses.tokenAccounts.revenuePayerUsdc,
-          underwriterUsdcVault: addresses.vaultUsdc,
-          borrowerReceivableUsdc: addresses.tokenAccounts.borrowerReceivableUsdc,
-          revenuePayer: wallet,
+          vaultAuthority: addresses.poolAuthority,
+          poolUsdcVault: addresses.poolUsdc,
+          borrowerUsdc: addresses.tokenAccounts.borrowerUsdc,
+          operator: wallet,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .instruction(),
     );
-  } else if (kind === "manual-repay") {
+  } else if (kind === "repay") {
     instructions.push(
       await program.methods
-        .manualRepay(bnUsdc(body.amountUsdc ?? "10.00"))
+        .repayCredit(bnUsdc(body.amountUsdc ?? "25.00"))
         .accounts({
-          protocolConfig: addresses.protocolConfig,
+          marketConfig: addresses.marketConfig,
           borrower: addresses.borrower,
+          liquidityPool: addresses.liquidityPool,
           creditLine: addresses.creditLine,
-          underwriterVault: addresses.underwriterVault,
-          payerUsdc: addresses.tokenAccounts.revenuePayerUsdc,
-          underwriterUsdcVault: addresses.vaultUsdc,
+          payerUsdc: addresses.tokenAccounts.repaymentPayerUsdc,
+          poolUsdcVault: addresses.poolUsdc,
+          feeVault: addresses.feeVault,
           payer: wallet,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .instruction(),
     );
-  } else if (kind === "fund-vault") {
-    instructions.push(
-      await program.methods
-        .fundUnderwriterVault(bnUsdc(body.amountUsdc ?? "100.00"))
-        .accounts({
-          protocolConfig: addresses.protocolConfig,
-          underwriterVault: addresses.underwriterVault,
-          underwriterUsdc: addresses.tokenAccounts.underwriterUsdc,
-          vaultUsdc: addresses.vaultUsdc,
-          underwriter: wallet,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .instruction(),
-    );
   } else if (kind === "score") {
-    const scoreVersionHash = randomByteArray(32);
-    const scoreAttestation = findPda(
-      [Buffer.from("score"), pubkey(addresses.creditLine).toBuffer(), toBuffer(scoreVersionHash)],
+    const scoreHash = randomByteArray(32);
+    const creditAttestation = findPda(
+      [Buffer.from("attestation"), pubkey(addresses.borrower).toBuffer(), toBuffer(scoreHash)],
       program.programId,
     );
-    const score = Number(body.score ?? 765);
-    const riskGrade = body.riskGrade ?? (score >= 850 ? "A" : score >= 700 ? "B" : score >= 550 ? "C" : "D");
+    const trustScore = Number(body.trustScore ?? body.score ?? 872);
+    const riskGrade = body.riskGrade ?? (trustScore >= 820 ? "A" : trustScore >= 680 ? "B" : trustScore >= 540 ? "C" : "D");
     instructions.push(
       await program.methods
-        .updateScoreAttestation({
-          scoreVersionHash,
-          score,
+        .updateCreditAttestation({
+          scoreHash,
+          score: Number(body.score ?? trustScore),
+          trustScore,
           riskGrade: riskGradeEnum(riskGrade),
-          recommendedLimitUsdc: bnUsdc(body.recommendedLimitUsdc ?? "100.00"),
-          recommendedAprBps: Number(body.recommendedAprBps ?? 1800),
-          pdEstimateBps: 900,
-          lgdEstimateBps: 4200,
-          confidenceBps: 6200,
-          featuresHash: randomByteArray(32),
+          recommendedLimitUsdc: bnUsdc(body.recommendedLimitUsdc ?? "650.00"),
+          recommendedAprBps: Number(body.recommendedAprBps ?? 825),
+          pdEstimateBps: 125,
+          lgdEstimateBps: 2100,
+          confidenceBps: 9400,
+          featuresHash: bytes(32, 44),
         })
         .accounts({
-          protocolConfig: addresses.protocolConfig,
+          marketConfig: addresses.marketConfig,
+          borrower: addresses.borrower,
           creditLine: addresses.creditLine,
-          scoreAttestation,
+          creditAttestation,
           authority: wallet,
           systemProgram: SystemProgram.programId,
         })
         .instruction(),
     );
-    meta.scoreAttestation = scoreAttestation.toBase58();
-  } else if (["suspend", "resume", "close", "default"].includes(kind)) {
+    meta.creditAttestation = creditAttestation.toBase58();
+  } else if (["suspend", "resume", "default", "close"].includes(kind)) {
+    const accounts = {
+      marketConfig: addresses.marketConfig,
+      borrower: addresses.borrower,
+      liquidityPool: addresses.liquidityPool,
+      creditLine: addresses.creditLine,
+      authority: wallet,
+    };
     if (kind === "suspend") {
-      instructions.push(await program.methods.suspendCreditLine().accounts({ protocolConfig: addresses.protocolConfig, creditLine: addresses.creditLine, authority: wallet }).instruction());
+      instructions.push(await program.methods.suspendCreditLine().accounts(accounts).instruction());
     } else if (kind === "resume") {
-      instructions.push(await program.methods.resumeCreditLine().accounts({ protocolConfig: addresses.protocolConfig, creditLine: addresses.creditLine, authority: wallet }).instruction());
-    } else if (kind === "close") {
-      instructions.push(
-        await program.methods
-          .closeRepaidCreditLine()
-          .accounts({
-            protocolConfig: addresses.protocolConfig,
-            borrower: addresses.borrower,
-            creditLine: addresses.creditLine,
-            underwriterVault: addresses.underwriterVault,
-            authority: wallet,
-          })
-          .instruction(),
-      );
+      instructions.push(await program.methods.resumeCreditLine().accounts(accounts).instruction());
+    } else if (kind === "default") {
+      instructions.push(await program.methods.markDefault().accounts(accounts).instruction());
     } else {
-      instructions.push(
-        await program.methods
-          .markDefault()
-          .accounts({
-            protocolConfig: addresses.protocolConfig,
-            creditLine: addresses.creditLine,
-            underwriterVault: addresses.underwriterVault,
-            authority: wallet,
-          })
-          .instruction(),
-      );
+      instructions.push(await program.methods.closeCreditLine().accounts(accounts).instruction());
     }
   } else {
     throw new Error(`Unknown transaction kind: ${kind}`);
@@ -420,8 +371,4 @@ function timestamp(value) {
   const raw = value?.toString?.() ?? String(value ?? "0");
   if (raw === "0") return null;
   return new Date(Number(raw) * 1000).toISOString();
-}
-
-function riskGradeName(value) {
-  return enumName(value).toUpperCase();
 }

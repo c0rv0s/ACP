@@ -4,9 +4,9 @@ broadcast/
 node_modules/
 dist/
 .DS_Store
-web/dist/
-web/.vite/
-web/source-assets/
+experiment001/web/dist/
+experiment001/web/.vite/
+experiment001/web/source-assets/
 coverage/
 coverage-report/
 .env

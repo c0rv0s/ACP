@@ -78,7 +78,7 @@ function publicDeployment(deployment) {
 }
 
 function serveStatic(response, pathname) {
-  const normalized = pathname === "/" ? "/index.html" : pathname;
+  const normalized = pathname === "/" || pathname === "/dashboard" || pathname === "/dashboard/" ? "/index.html" : pathname;
   const requested = path.normalize(decodeURIComponent(normalized)).replace(/^(\.\.[/\\])+/, "");
   const file = path.join(ROOT_DIR, requested);
   if (!file.startsWith(ROOT_DIR)) {
